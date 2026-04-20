@@ -25,7 +25,6 @@ const COLORS = {
   vaultPrimary: '#5D3FD3', vaultBg: '#020202', vaultCard: '#0A0A0A', vaultBorder: '#1A1A1A'
 };
 
-// --- Encryption ---
 const ENCRYPT_KEY = 7;
 const encryptData = (dataObj) => JSON.stringify(dataObj).split('').map(c => (c.charCodeAt(0) + ENCRYPT_KEY).toString(16)).join('-');
 const decryptData = (encryptedStr) => {
@@ -33,7 +32,6 @@ const decryptData = (encryptedStr) => {
   catch (e) { return []; }
 };
 
-// --- Custom Video Player Component ---
 const SecureVideoPlayer = ({ sourceUri, onClose }) => {
   const [isMuted, setIsMuted] = useState(true);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -472,26 +470,92 @@ export default function CovertVaultFull() {
   const sortedLinks = [...links].sort((a, b) => (b.isFav ? 1 : 0) - (a.isFav ? 1 : 0));
   const sortedVideos = [...videos].sort((a, b) => (b.isFav ? 1 : 0) - (a.isFav ? 1 : 0));
 
-  const ToastComponent = () => {
-    const icons = { success: 'checkmark-circle', danger: 'close-circle', warning: 'warning', info: 'information-circle' };
-    const colors = { success: COLORS.success, danger: COLORS.danger, warning: COLORS.warning, info: COLORS.accent };
+  const renderToast = () => {
+    const toastColor = toastData.type === 'success' ? COLORS.success : toastData.type === 'danger' ? COLORS.danger : toastData.type === 'warning' ? COLORS.warning : COLORS.accent;
+    const toastIcon = toastData.type === 'success' ? 'checkmark-circle' : toastData.type === 'danger' ? 'close-circle' : toastData.type === 'warning' ? 'warning' : 'information-circle';
+    
     return (
       <Animated.View style={[styles.sideToast, { transform: [{ translateX: toastAnim }] }]}>
         <View style={styles.toastContent}>
-          <Ionicons name={icons[toastData.type]} size={18} color={colors[toastData.type]} />
+          <Ionicons name={toastIcon} size={18} color={toastColor} />
           <View style={{ marginLeft: 10, flex: 1 }}>
             <Text style={styles.toastTitle}>{toastData.title}</Text>
             <Text style={styles.toastMsg}>{toastData.msg}</Text>
           </View>
         </View>
         <View style={styles.toastBarBg}>
-          <Animated.View style={[styles.toastBarFill, { backgroundColor: colors[toastData.type], width: progressAnim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }) }]} />
+          <Animated.View style={[styles.toastBarFill, { backgroundColor: toastColor, width: progressAnim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }) }]} />
         </View>
       </Animated.View>
     );
   };
 
   if (!isLoggedIn && !isDecoyApp) {
+    if (showSignUp) {
+      return (
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+            <SafeAreaView style={styles.safeArea}>
+              <StatusBar barStyle="light-content" />
+              <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+                <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 40 }}>
+                  <TouchableOpacity onPress={() => setShowSignUp(false)} style={{ marginBottom: 20 }}>
+                    <Ionicons name="arrow-back" size={24} color={COLORS.text} />
+                  </TouchableOpacity>
+                  <Text style={styles.coverTitle}>Create Account</Text>
+                  <Text style={styles.coverSub}>Start your investment journey</Text>
+
+                  <View style={{ marginTop: 30 }}>
+                    <Text style={styles.inputLabel}>Full Name</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="John Doe"
+                      placeholderTextColor={COLORS.border}
+                      value={signUpData.name}
+                      onChangeText={(t) => setSignUpData({ ...signUpData, name: t })}
+                    />
+                    <Text style={styles.inputLabel}>Email</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="email@example.com"
+                      placeholderTextColor={COLORS.border}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      value={signUpData.email}
+                      onChangeText={(t) => setSignUpData({ ...signUpData, email: t })}
+                    />
+                    <Text style={styles.inputLabel}>Password</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="At least 6 characters"
+                      placeholderTextColor={COLORS.border}
+                      secureTextEntry
+                      value={signUpData.password}
+                      onChangeText={(t) => setSignUpData({ ...signUpData, password: t })}
+                    />
+                    <Text style={styles.inputLabel}>Confirm Password</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Re-enter password"
+                      placeholderTextColor={COLORS.border}
+                      secureTextEntry
+                      value={signUpData.confirm}
+                      onChangeText={(t) => setSignUpData({ ...signUpData, confirm: t })}
+                    />
+
+                    <TouchableOpacity style={[styles.coverBtn, { marginTop: 20 }]} onPress={handleDecoySignUp} disabled={fakeLoading}>
+                      {fakeLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.coverBtnTxt}>Sign Up</Text>}
+                    </TouchableOpacity>
+                  </View>
+                </ScrollView>
+              </KeyboardAvoidingView>
+              {renderToast()}
+            </SafeAreaView>
+          </View>
+        </TouchableWithoutFeedback>
+      );
+    }
+
     return (
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
@@ -546,73 +610,8 @@ export default function CovertVaultFull() {
                 </View>
               </Animated.View>
             </KeyboardAvoidingView>
-            <ToastComponent />
+            {renderToast()}
             {showPrivacyBlur && <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />}
-          </SafeAreaView>
-        </View>
-      </TouchableWithoutFeedback>
-    );
-  }
-
-  if (showSignUp) {
-    return (
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
-          <SafeAreaView style={styles.safeArea}>
-            <StatusBar barStyle="light-content" />
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-              <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 40 }}>
-                <TouchableOpacity onPress={() => setShowSignUp(false)} style={{ marginBottom: 20 }}>
-                  <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-                </TouchableOpacity>
-                <Text style={styles.coverTitle}>Create Account</Text>
-                <Text style={styles.coverSub}>Start your investment journey</Text>
-
-                <View style={{ marginTop: 30 }}>
-                  <Text style={styles.inputLabel}>Full Name</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="John Doe"
-                    placeholderTextColor={COLORS.border}
-                    value={signUpData.name}
-                    onChangeText={(t) => setSignUpData({ ...signUpData, name: t })}
-                  />
-                  <Text style={styles.inputLabel}>Email</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="email@example.com"
-                    placeholderTextColor={COLORS.border}
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                    value={signUpData.email}
-                    onChangeText={(t) => setSignUpData({ ...signUpData, email: t })}
-                  />
-                  <Text style={styles.inputLabel}>Password</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="At least 6 characters"
-                    placeholderTextColor={COLORS.border}
-                    secureTextEntry
-                    value={signUpData.password}
-                    onChangeText={(t) => setSignUpData({ ...signUpData, password: t })}
-                  />
-                  <Text style={styles.inputLabel}>Confirm Password</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Re-enter password"
-                    placeholderTextColor={COLORS.border}
-                    secureTextEntry
-                    value={signUpData.confirm}
-                    onChangeText={(t) => setSignUpData({ ...signUpData, confirm: t })}
-                  />
-
-                  <TouchableOpacity style={[styles.coverBtn, { marginTop: 20 }]} onPress={handleDecoySignUp} disabled={fakeLoading}>
-                    {fakeLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.coverBtnTxt}>Sign Up</Text>}
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
-            </KeyboardAvoidingView>
-            <ToastComponent />
           </SafeAreaView>
         </View>
       </TouchableWithoutFeedback>
@@ -767,7 +766,7 @@ export default function CovertVaultFull() {
               </TouchableOpacity>
             ))}
           </View>
-          <ToastComponent />
+          {renderToast()}
           {showPrivacyBlur && <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />}
         </SafeAreaView>
       </View>
@@ -785,7 +784,7 @@ export default function CovertVaultFull() {
             </TouchableOpacity>
           </View>
           <WebView source={{ uri: activeUrl }} style={{ flex: 1, backgroundColor: COLORS.bg }} showsVerticalScrollIndicator={false} javaScriptEnabled={true} domStorageEnabled={true} sharedCookiesEnabled={true} thirdPartyCookiesEnabled={true} />
-          <ToastComponent />
+          {renderToast()}
           {showPrivacyBlur && <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />}
         </SafeAreaView>
       </View>
@@ -797,7 +796,7 @@ export default function CovertVaultFull() {
       <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
         <SafeAreaView style={styles.safeArea}>
           <SecureVideoPlayer sourceUri={activeVideo.uri} onClose={() => setActiveVideo(null)} />
-          <ToastComponent />
+          {renderToast()}
           {showPrivacyBlur && <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />}
         </SafeAreaView>
       </View>
@@ -1024,7 +1023,7 @@ export default function CovertVaultFull() {
             </View>
           </Modal>
 
-          <ToastComponent />
+          {renderToast()}
           {showPrivacyBlur && <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />}
         </SafeAreaView>
       </View>
