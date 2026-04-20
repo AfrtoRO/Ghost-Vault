@@ -1,7 +1,5 @@
 {
   "build": {
-    "production": {
-      "distribution": "internal"
-    }
+    "production": {}
   }
 }
