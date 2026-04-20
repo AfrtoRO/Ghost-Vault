@@ -234,14 +234,14 @@ export default function CovertVaultFull() {
   };
 
   const loadEncryptedData = async () => {
-    const savedLinks = await AsyncStorage.getItem('cv_links_v2');
-    const savedMedia = await AsyncStorage.getItem('cv_media_v2');
+    const savedLinks = await AsyncStorage.getItem('cv_links_vfinal');
+    const savedMedia = await AsyncStorage.getItem('cv_media_vfinal');
     if (savedLinks) setLinks(decryptData(savedLinks));
     if (savedMedia) setMedia(decryptData(savedMedia));
   };
 
-  const saveEncryptedLinks = async (data) => { setLinks(data); await AsyncStorage.setItem('cv_links_v2', encryptData(data)); };
-  const saveEncryptedMedia = async (data) => { setMedia(data); await AsyncStorage.setItem('cv_media_v2', encryptData(data)); };
+  const saveEncryptedLinks = async (data) => { setLinks(data); await AsyncStorage.setItem('cv_links_vfinal', encryptData(data)); };
+  const saveEncryptedMedia = async (data) => { setMedia(data); await AsyncStorage.setItem('cv_media_vfinal', encryptData(data)); };
 
   const triggerShake = () => {
     Animated.sequence([
@@ -327,6 +327,13 @@ export default function CovertVaultFull() {
     }, 1500);
   };
 
+  const handleDecoyLogout = () => {
+    setIsDecoyApp(false);
+    setDecoyUser(null);
+    setAuthInput('');
+    setPassInput('');
+  };
+
   const downloadVideoUrl = async () => {
     if (!vidUrlInput.trim()) return;
     Keyboard.dismiss();
@@ -393,6 +400,11 @@ export default function CovertVaultFull() {
     }
   };
 
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.5 });
+    if (!result.canceled) { setCustomIconUri(result.assets[0].uri); setIconType('custom'); }
+  };
+
   const addNewLink = () => {
     if (!newTitle || !newUrl) return;
     let finalUrl = newUrl.startsWith('http') ? newUrl : 'https://' + newUrl;
@@ -419,6 +431,103 @@ export default function CovertVaultFull() {
       saveEncryptedMedia(media.filter(m => m.id !== confirmDel.id));
     }
     setConfirmDel(null);
+  };
+
+  const copyUrl = async (url) => {
+    await Clipboard.setStringAsync(url);
+    showToast('info', 'Copied', 'URL saved to clipboard.');
+  };
+
+  const renderIcon = (item) => {
+    if (item.iconType === 'none') return <Ionicons name="globe-outline" size={24} color={COLORS.subText} />;
+    if (item.iconType === 'custom' && item.customIcon) return <Image source={{ uri: item.customIcon }} style={{ width: 30, height: 30, borderRadius: 8 }} />;
+    const domain = item.url.replace('http://', '').replace('https://', '').split('/')[0];
+    return <Image source={{ uri: `https://www.google.com/s2/favicons?sz=64&domain=${domain}` }} style={{ width: 30, height: 30, borderRadius: 8 }} />;
+  };
+
+  const renderDecoyContent = () => {
+    switch (decoyTab) {
+      case 'home':
+        return (
+          <Animated.View style={{ opacity: tabAnim, transform: [{ scale: tabAnim }] }}>
+            <View style={styles.decoyBalanceCard}>
+              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14 }}>Available Balance</Text>
+              <Text style={{ color: '#FFF', fontSize: 40, fontWeight: '900', marginVertical: 10 }}>$12,450.80</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="arrow-up" size={16} color={COLORS.success} />
+                <Text style={{ color: COLORS.success, fontWeight: 'bold', marginLeft: 4 }}>$1,240.12 (11.2%) Today</Text>
+              </View>
+            </View>
+            <View style={styles.decoySection}>
+              <Text style={styles.decoySectionTitle}>Your Portfolio</Text>
+              {['AAPL', 'TSLA', 'BTC'].map((asset, i) => (
+                <View key={asset} style={styles.decoyAssetRow}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={[styles.decoyAssetIcon, { backgroundColor: i === 0 ? '#333' : i === 1 ? '#222' : '#444' }]}>
+                      <Ionicons name={i === 0 ? 'logo-apple' : i === 1 ? 'car' : 'logo-bitcoin'} size={20} color="#FFF" />
+                    </View>
+                    <View>
+                      <Text style={styles.decoyAssetName}>{asset}</Text>
+                      <Text style={styles.decoyAssetShares}>{i + 2} shares</Text>
+                    </View>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={styles.decoyAssetValue}>${(1500 * (i + 1)).toLocaleString()}</Text>
+                    <Text style={{ color: i === 0 ? COLORS.success : COLORS.danger }}>{i === 0 ? '+5.2%' : '-2.1%'}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+            <TouchableOpacity style={styles.decoyActionButton} onPress={() => showToast('info', 'Demo', 'Simulated platform.')}>
+              <Text style={styles.decoyActionButtonText}>Deposit Funds</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        );
+      case 'market':
+        return (
+          <Animated.View style={{ opacity: tabAnim, alignItems: 'center', paddingTop: 20 }}>
+            <Text style={[styles.decoySectionTitle, { marginBottom: 20 }]}>Market Overview</Text>
+            <Ionicons name="bar-chart" size={120} color={COLORS.border} />
+            <Text style={{ color: COLORS.subText, marginTop: 20 }}>Live market data would appear here.</Text>
+            <View style={{ marginTop: 30, width: '100%' }}>
+              {['S&P 500', 'NASDAQ', 'DOW'].map((idx) => (
+                <View key={idx} style={styles.decoyAssetRow}>
+                  <Text style={styles.decoyAssetName}>{idx}</Text>
+                  <Text style={[styles.decoyAssetValue, { color: COLORS.success }]}>+0.8%</Text>
+                </View>
+              ))}
+            </View>
+          </Animated.View>
+        );
+      case 'wallet':
+        return (
+          <Animated.View style={{ opacity: tabAnim, alignItems: 'center', paddingTop: 40 }}>
+            <Ionicons name="wallet-outline" size={80} color={COLORS.border} />
+            <Text style={{ color: COLORS.subText, marginTop: 20, textAlign: 'center' }}>Connect your bank account or credit card to start trading.</Text>
+            <TouchableOpacity style={[styles.decoyActionButton, { marginTop: 30, backgroundColor: COLORS.card, width: '100%' }]}>
+              <Text style={styles.decoyActionButtonText}>Add Payment Method</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        );
+      case 'profile':
+        return (
+          <Animated.View style={{ opacity: tabAnim, paddingTop: 20 }}>
+            <View style={{ alignItems: 'center', marginVertical: 20 }}>
+              <View style={styles.decoyAvatarLarge}>
+                <Ionicons name="person" size={40} color="#FFF" />
+              </View>
+              <Text style={[styles.coverTitle, { fontSize: 22, marginTop: 15 }]}>{decoyUser?.name || 'User'}</Text>
+              <Text style={styles.coverSub}>{decoyUser?.email || 'user@example.com'}</Text>
+            </View>
+            <TouchableOpacity style={styles.decoyProfileItem} onPress={handleDecoyLogout}>
+              <Ionicons name="log-out-outline" size={20} color={COLORS.danger} />
+              <Text style={{ color: COLORS.danger, marginLeft: 10 }}>Sign Out</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        );
+      default:
+        return null;
+    }
   };
 
   const sortedLinks = [...links].sort((a, b) => (b.isFav ? 1 : 0) - (a.isFav ? 1 : 0));
@@ -525,17 +634,25 @@ export default function CovertVaultFull() {
               <View style={{ marginLeft: 10 }}><Text style={{ color: COLORS.subText, fontSize: 12 }}>Welcome,</Text><Text style={{ color: '#FFF', fontSize: 16, fontWeight: 'bold' }}>{decoyUser?.name || 'Investor'}</Text></View>
             </View>
           </View>
+          
           <ScrollView style={{ flex: 1, padding: 20 }} showsVerticalScrollIndicator={false}>
-            <Animated.View style={{ opacity: tabAnim, transform: [{ scale: tabAnim }] }}>
-              <View style={styles.decoyBalanceCard}>
-                <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14 }}>Available Balance</Text>
-                <Text style={{ color: '#FFF', fontSize: 40, fontWeight: '900', marginVertical: 10 }}>$12,450.80</Text>
-              </View>
-              <TouchableOpacity style={styles.decoyActionButton} onPress={() => { setIsDecoyApp(false); setAuthInput(''); setPassInput(''); }}>
-                <Text style={styles.decoyActionButtonText}>Sign Out</Text>
-              </TouchableOpacity>
-            </Animated.View>
+            {renderDecoyContent()}
           </ScrollView>
+
+          <View style={styles.decoyBottomNav}>
+            {[
+              { tab: 'home', icon: 'home', label: 'Home' },
+              { tab: 'market', icon: 'bar-chart', label: 'Market' },
+              { tab: 'wallet', icon: 'wallet', label: 'Wallet' },
+              { tab: 'profile', icon: 'person', label: 'Profile' }
+            ].map((item) => (
+              <TouchableOpacity key={item.tab} style={styles.decoyNavItem} onPress={() => setDecoyTab(item.tab)}>
+                <Ionicons name={decoyTab === item.tab ? item.icon : `${item.icon}-outline`} size={24} color={decoyTab === item.tab ? COLORS.primary : COLORS.subText} />
+                <Text style={{ color: decoyTab === item.tab ? COLORS.primary : COLORS.subText, fontSize: 10, marginTop: 2 }}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {renderToast()}
           {showPrivacyBlur && <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />}
         </SafeAreaView>
       </View>
@@ -698,6 +815,17 @@ const styles = StyleSheet.create({
   decoyBalanceCard: { backgroundColor: COLORS.card, padding: 25, borderRadius: 24, marginBottom: 25, borderWidth: 1, borderColor: COLORS.border },
   decoyActionButton: { backgroundColor: COLORS.primary, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 20 },
   decoyActionButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
+  decoySectionTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginBottom: 15 },
+  decoyBottomNav: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 20, backgroundColor: COLORS.bg, borderTopWidth: 1, borderColor: COLORS.border },
+  decoyNavItem: { flex: 1, alignItems: 'center' },
+  decoySection: { marginTop: 25 },
+  decoyAssetRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  decoyAssetIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  decoyAssetName: { color: COLORS.text, fontSize: 16, fontWeight: '600' },
+  decoyAssetShares: { color: COLORS.subText, fontSize: 12 },
+  decoyAssetValue: { color: COLORS.text, fontSize: 16, fontWeight: '700' },
+  decoyAvatarLarge: { width: 80, height: 80, borderRadius: 40, backgroundColor: COLORS.border, justifyContent: 'center', alignItems: 'center' },
+  decoyProfileItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   vaultHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: COLORS.vaultBorder },
   vaultHeaderTitle: { fontSize: 28, fontWeight: '900', color: COLORS.text, letterSpacing: -1 },
   vaultHeaderSub: { fontSize: 14, color: COLORS.vaultPrimary, fontWeight: '800', marginTop: 2 },
