@@ -53,6 +53,7 @@ const SecureMediaViewer = ({ media, onClose }) => {
   const [showCaptcha, setShowCaptcha] = useState(false);
   const [captchaCode, setCaptchaCode] = useState('');
   const [userInput, setUserInput] = useState('');
+  const [barWidth, setBarWidth] = useState(0);
 
   const generateCaptcha = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -79,6 +80,14 @@ const SecureMediaViewer = ({ media, onClose }) => {
         ? Math.min(status.positionMillis + 10000, status.durationMillis || 0)
         : Math.max(status.positionMillis - 10000, 0);
       videoRef.current.setPositionAsync(newPos);
+    }
+  };
+
+  const handleProgressBarPress = (e) => {
+    if (barWidth > 0 && status.durationMillis) {
+      const percentage = e.nativeEvent.locationX / barWidth;
+      const seekTo = percentage * status.durationMillis;
+      videoRef.current.setPositionAsync(seekTo);
     }
   };
 
@@ -112,9 +121,14 @@ const SecureMediaViewer = ({ media, onClose }) => {
       <View style={styles.customVideoControls}>
         <View style={styles.progressContainer}>
           <Text style={styles.timeText}>{formatTime(status.positionMillis)}</Text>
-          <View style={styles.progressBarBg}>
+          <TouchableOpacity 
+            activeOpacity={0.9} 
+            onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)} 
+            onPress={handleProgressBarPress} 
+            style={styles.progressBarBg}
+          >
             <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
-          </View>
+          </TouchableOpacity>
           <Text style={styles.timeText}>{formatTime(status.durationMillis)}</Text>
         </View>
 
@@ -152,7 +166,7 @@ const SecureMediaViewer = ({ media, onClose }) => {
             <View style={styles.captchaBox}>
               <Text style={styles.captchaText}>{captchaCode}</Text>
             </View>
-            <TextInput style={[styles.input, { textAlign: 'center', fontSize: 20, letterSpacing: 5, marginTop: 15 }]} placeholder="_ _ _ _" placeholderTextColor={COLORS.border} maxLength={4} autoCapitalize="characters" keyboardAppearance="dark" value={userInput} onChangeText={setUserInput} />
+            <TextInput style={[styles.input, { textAlign: 'center', fontSize: 20, letterSpacing: 5, marginTop: 15 }]} placeholder="_ _ _ _" placeholderTextColor={COLORS.border} maxLength={4} autoCapitalize="characters" keyboardAppearance="default" value={userInput} onChangeText={setUserInput} />
             <View style={{ flexDirection: 'row', gap: 10, width: '100%', marginTop: 10 }}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCaptcha(false)}>
                 <Text style={styles.cancelBtnTxt}>Cancel</Text>
@@ -209,6 +223,15 @@ export default function CovertVaultFull() {
   const [toastData, setToastData] = useState({ visible: false, type: 'info', title: '', msg: '' });
   const toastAnim = useRef(new Animated.Value(width)).current;
   const progressAnim = useRef(new Animated.Value(100)).current;
+
+  // حقن جافا سكريبت لكتم أي فيديو/صوت في المتصفح تلقائياً
+  const webViewMuteJS = `
+    setInterval(function() {
+      var mediaElements = document.querySelectorAll('video, audio');
+      mediaElements.forEach(function(el) { el.muted = true; });
+    }, 500);
+    true;
+  `;
 
   useEffect(() => {
     loadEncryptedData();
@@ -292,7 +315,6 @@ export default function CovertVaultFull() {
       authenticateBiometrics();
     }
   };
-
   const handleDecoyLogin = () => {
     Keyboard.dismiss();
     if (!authInput.trim() || !passInput.trim()) { triggerShake(); return; }
@@ -374,33 +396,35 @@ export default function CovertVaultFull() {
       
       let result = await ImagePicker.launchImageLibraryAsync({ 
         mediaTypes: ImagePicker.MediaTypeOptions.All, 
-        allowsEditing: false, 
+        allowsEditing: false,
+        allowsMultipleSelection: true,
         quality: 1 
       });
 
       if (!result.canceled && result.assets.length > 0) {
-        const asset = result.assets[0];
-        const isVideo = asset.type === 'video';
-        const originalExt = asset.uri.split('.').pop() || (isVideo ? 'mp4' : 'jpg');
+        const newItems = [];
+        for (const asset of result.assets) {
+          const isVideo = asset.type === 'video';
+          const originalExt = asset.uri.split('.').pop() || (isVideo ? 'mp4' : 'jpg');
+          const secureName = `${generateSecureName()}.${originalExt}`;
+          const securePath = FileSystem.documentDirectory + secureName;
+          
+          await FileSystem.copyAsync({ from: asset.uri, to: securePath });
+          
+          newItems.push({ 
+            id: Date.now().toString() + Math.random().toString(), 
+            uri: securePath, 
+            type: isVideo ? 'video' : 'image', 
+            isFav: false, 
+            title: `Secured Asset` 
+          });
+        }
         
-        const secureName = `${generateSecureName()}.${originalExt}`;
-        const securePath = FileSystem.documentDirectory + secureName;
-        
-        await FileSystem.copyAsync({ from: asset.uri, to: securePath });
-        
-        const newItem = { 
-          id: Date.now().toString(), 
-          uri: securePath, 
-          type: isVideo ? 'video' : 'image', 
-          isFav: false, 
-          title: `Secured ${isVideo ? 'Video' : 'Image'}` 
-        };
-        
-        saveEncryptedMedia([newItem, ...media]);
-        showToast('success', 'Encrypted', 'Asset secured in vault.');
+        saveEncryptedMedia([...newItems, ...media]);
+        showToast('success', 'Encrypted', `${newItems.length} asset(s) secured.`);
       }
     } catch (error) {
-      showToast('danger', 'Error', 'Failed to import asset.');
+      showToast('danger', 'Error', 'Failed to import assets.');
     }
   };
 
@@ -459,13 +483,13 @@ export default function CovertVaultFull() {
     const colors = { success: COLORS.success, danger: COLORS.danger, warning: COLORS.warning, info: COLORS.accent };
     return (
       <Animated.View style={[styles.sideToast, { transform: [{ translateX: toastAnim }] }]}>
-        <View style={styles.toastContent}>
+        <TouchableOpacity activeOpacity={0.9} onPress={() => setToastData({ visible: false, type: 'info', title: '', msg: '' })} style={styles.toastContent}>
           <Ionicons name={icons[toastData.type]} size={18} color={colors[toastData.type]} />
           <View style={{ marginLeft: 10, flex: 1 }}>
             <Text style={styles.toastTitle}>{toastData.title}</Text>
             <Text style={styles.toastMsg}>{toastData.msg}</Text>
           </View>
-        </View>
+        </TouchableOpacity>
         <View style={styles.toastBarBg}>
           <Animated.View style={[styles.toastBarFill, { backgroundColor: colors[toastData.type], width: progressAnim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }) }]} />
         </View>
@@ -661,7 +685,7 @@ export default function CovertVaultFull() {
           <View style={styles.webviewHeader}>
             <TouchableOpacity onPress={() => setActiveUrl(null)} style={styles.webviewBack}><Ionicons name="close" size={24} color={COLORS.text} /><Text style={styles.webviewBackTxt}>Close</Text></TouchableOpacity>
           </View>
-          <WebView source={{ uri: activeUrl }} style={{ flex: 1, backgroundColor: COLORS.bg }} />
+          <WebView source={{ uri: activeUrl }} style={{ flex: 1, backgroundColor: COLORS.bg }} injectedJavaScript={webViewMuteJS} mediaPlaybackRequiresUserAction={true} />
           <ToastComponent />
           {showPrivacyBlur && <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />}
         </SafeAreaView>
@@ -733,7 +757,7 @@ export default function CovertVaultFull() {
                     <TextInput style={[styles.input, { flex: 1, marginBottom: 0, height: 50, backgroundColor: '#050505' }]} placeholder="Direct link (.mp4)" placeholderTextColor={COLORS.border} keyboardAppearance="dark" value={vidUrlInput} onChangeText={setVidUrlInput} />
                     <TouchableOpacity style={styles.downloadBtn} onPress={downloadVideoUrl}><Ionicons name="cloud-download" size={24} color="#FFF" /></TouchableOpacity>
                   </View>
-                  <TouchableOpacity style={{ alignSelf: 'center', marginTop: 15 }} onPress={pickMediaSecurely}><Text style={{ color: COLORS.subText, fontSize: 13, textDecorationLine: 'underline' }}>Import from Gallery (Images/Videos)</Text></TouchableOpacity>
+                  <TouchableOpacity style={{ alignSelf: 'center', marginTop: 15 }} onPress={pickMediaSecurely}><Text style={{ color: COLORS.subText, fontSize: 13, textDecorationLine: 'underline' }}>Import from Gallery (Multiple allowed)</Text></TouchableOpacity>
                 </View>
 
                 <View style={styles.vidGrid}>
@@ -897,8 +921,8 @@ const styles = StyleSheet.create({
   customVideoControls: { position: 'absolute', bottom: 40, width: '100%', paddingHorizontal: 20 },
   progressContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 10 },
   timeText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
-  progressBarBg: { flex: 1, height: 6, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 3, overflow: 'hidden' },
-  progressBarFill: { height: '100%', backgroundColor: COLORS.success },
+  progressBarBg: { flex: 1, height: 20, justifyContent: 'center' },
+  progressBarFill: { height: 6, backgroundColor: COLORS.success, borderRadius: 3 },
   controlsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   vidControlBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
   skipBtn: { alignItems: 'center', justifyContent: 'center', width: 40 },
