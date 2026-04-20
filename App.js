@@ -50,7 +50,6 @@ const SecureMediaViewer = ({ media, onClose }) => {
   const [isPlaying, setIsPlaying] = useState(true);
   const [status, setStatus] = useState({});
   const videoRef = useRef(null);
-
   const [showCaptcha, setShowCaptcha] = useState(false);
   const [captchaCode, setCaptchaCode] = useState('');
   const [userInput, setUserInput] = useState('');
@@ -123,23 +122,19 @@ const SecureMediaViewer = ({ media, onClose }) => {
           <TouchableOpacity style={styles.vidControlBtn} onPress={onClose}>
             <Ionicons name="close" size={24} color="#FFF" />
           </TouchableOpacity>
-          
           <View style={{ flexDirection: 'row', gap: 15, alignItems: 'center' }}>
             <TouchableOpacity style={styles.skipBtn} onPress={() => handleSkip('backward')}>
               <Ionicons name="play-back" size={20} color="#FFF" />
               <Text style={styles.skipTxt}>10s</Text>
             </TouchableOpacity>
-
             <TouchableOpacity style={[styles.vidControlBtn, { width: 60, height: 60, borderRadius: 30 }]} onPress={() => setIsPlaying(!isPlaying)}>
               <Ionicons name={isPlaying ? "pause" : "play"} size={32} color="#FFF" />
             </TouchableOpacity>
-
             <TouchableOpacity style={styles.skipBtn} onPress={() => handleSkip('forward')}>
               <Ionicons name="play-forward" size={20} color="#FFF" />
               <Text style={styles.skipTxt}>10s</Text>
             </TouchableOpacity>
           </View>
-
           <TouchableOpacity style={[styles.vidControlBtn, !isMuted && { backgroundColor: COLORS.success }]} onPress={() => {
             if (isMuted) generateCaptcha(); else setIsMuted(true);
           }}>
@@ -157,7 +152,7 @@ const SecureMediaViewer = ({ media, onClose }) => {
             <View style={styles.captchaBox}>
               <Text style={styles.captchaText}>{captchaCode}</Text>
             </View>
-            <TextInput style={[styles.input, { textAlign: 'center', fontSize: 20, letterSpacing: 5, marginTop: 15 }]} placeholder="_ _ _ _" placeholderTextColor={COLORS.border} maxLength={4} autoCapitalize="characters" value={userInput} onChangeText={setUserInput} />
+            <TextInput style={[styles.input, { textAlign: 'center', fontSize: 20, letterSpacing: 5, marginTop: 15 }]} placeholder="_ _ _ _" placeholderTextColor={COLORS.border} maxLength={4} autoCapitalize="characters" keyboardAppearance="dark" value={userInput} onChangeText={setUserInput} />
             <View style={{ flexDirection: 'row', gap: 10, width: '100%', marginTop: 10 }}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCaptcha(false)}>
                 <Text style={styles.cancelBtnTxt}>Cancel</Text>
@@ -210,7 +205,10 @@ export default function CovertVaultFull() {
 
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const tabAnim = useRef(new Animated.Value(0)).current;
+  
   const [toastData, setToastData] = useState({ visible: false, type: 'info', title: '', msg: '' });
+  const toastAnim = useRef(new Animated.Value(width)).current;
+  const progressAnim = useRef(new Animated.Value(100)).current;
 
   useEffect(() => {
     loadEncryptedData();
@@ -230,18 +228,24 @@ export default function CovertVaultFull() {
 
   const showToast = (type, title, msg) => {
     setToastData({ visible: true, type, title, msg });
-    setTimeout(() => setToastData({ visible: false, type: 'info', title: '', msg: '' }), 3000);
+    Animated.spring(toastAnim, { toValue: 0, friction: 8, tension: 40, useNativeDriver: true }).start();
+    progressAnim.setValue(100);
+    Animated.timing(progressAnim, { toValue: 0, duration: 2500, useNativeDriver: false }).start(() => {
+      Animated.timing(toastAnim, { toValue: width, duration: 300, useNativeDriver: true }).start(() => {
+        setToastData({ visible: false, type: 'info', title: '', msg: '' });
+      });
+    });
   };
 
   const loadEncryptedData = async () => {
-    const savedLinks = await AsyncStorage.getItem('cv_links_vfinal');
-    const savedMedia = await AsyncStorage.getItem('cv_media_vfinal');
+    const savedLinks = await AsyncStorage.getItem('cv_links_master');
+    const savedMedia = await AsyncStorage.getItem('cv_media_master');
     if (savedLinks) setLinks(decryptData(savedLinks));
     if (savedMedia) setMedia(decryptData(savedMedia));
   };
 
-  const saveEncryptedLinks = async (data) => { setLinks(data); await AsyncStorage.setItem('cv_links_vfinal', encryptData(data)); };
-  const saveEncryptedMedia = async (data) => { setMedia(data); await AsyncStorage.setItem('cv_media_vfinal', encryptData(data)); };
+  const saveEncryptedLinks = async (data) => { setLinks(data); await AsyncStorage.setItem('cv_links_master', encryptData(data)); };
+  const saveEncryptedMedia = async (data) => { setMedia(data); await AsyncStorage.setItem('cv_media_master', encryptData(data)); };
 
   const triggerShake = () => {
     Animated.sequence([
@@ -410,7 +414,9 @@ export default function CovertVaultFull() {
     let finalUrl = newUrl.startsWith('http') ? newUrl : 'https://' + newUrl;
     const newItem = { id: Date.now().toString(), title: newTitle, url: finalUrl, privacy: privacyType, iconType: iconType, customIcon: customIconUri, isFav: false };
     saveEncryptedLinks([newItem, ...links]);
-    setNewTitle(''); setNewUrl(''); setShowAddModal(false);
+    setNewTitle(''); setNewUrl(''); setPrivacyType('visible'); setIconType('auto'); setCustomIconUri('');
+    setShowAddModal(false);
+    showToast('success', 'Saved', 'Link encrypted successfully.');
   };
 
   const toggleFavorite = (type, id) => {
@@ -445,107 +451,25 @@ export default function CovertVaultFull() {
     return <Image source={{ uri: `https://www.google.com/s2/favicons?sz=64&domain=${domain}` }} style={{ width: 30, height: 30, borderRadius: 8 }} />;
   };
 
-  const renderDecoyContent = () => {
-    switch (decoyTab) {
-      case 'home':
-        return (
-          <Animated.View style={{ opacity: tabAnim, transform: [{ scale: tabAnim }] }}>
-            <View style={styles.decoyBalanceCard}>
-              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14 }}>Available Balance</Text>
-              <Text style={{ color: '#FFF', fontSize: 40, fontWeight: '900', marginVertical: 10 }}>$12,450.80</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="arrow-up" size={16} color={COLORS.success} />
-                <Text style={{ color: COLORS.success, fontWeight: 'bold', marginLeft: 4 }}>$1,240.12 (11.2%) Today</Text>
-              </View>
-            </View>
-            <View style={styles.decoySection}>
-              <Text style={styles.decoySectionTitle}>Your Portfolio</Text>
-              {['AAPL', 'TSLA', 'BTC'].map((asset, i) => (
-                <View key={asset} style={styles.decoyAssetRow}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <View style={[styles.decoyAssetIcon, { backgroundColor: i === 0 ? '#333' : i === 1 ? '#222' : '#444' }]}>
-                      <Ionicons name={i === 0 ? 'logo-apple' : i === 1 ? 'car' : 'logo-bitcoin'} size={20} color="#FFF" />
-                    </View>
-                    <View>
-                      <Text style={styles.decoyAssetName}>{asset}</Text>
-                      <Text style={styles.decoyAssetShares}>{i + 2} shares</Text>
-                    </View>
-                  </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={styles.decoyAssetValue}>${(1500 * (i + 1)).toLocaleString()}</Text>
-                    <Text style={{ color: i === 0 ? COLORS.success : COLORS.danger }}>{i === 0 ? '+5.2%' : '-2.1%'}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-            <TouchableOpacity style={styles.decoyActionButton} onPress={() => showToast('info', 'Demo', 'Simulated platform.')}>
-              <Text style={styles.decoyActionButtonText}>Deposit Funds</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        );
-      case 'market':
-        return (
-          <Animated.View style={{ opacity: tabAnim, alignItems: 'center', paddingTop: 20 }}>
-            <Text style={[styles.decoySectionTitle, { marginBottom: 20 }]}>Market Overview</Text>
-            <Ionicons name="bar-chart" size={120} color={COLORS.border} />
-            <Text style={{ color: COLORS.subText, marginTop: 20 }}>Live market data would appear here.</Text>
-            <View style={{ marginTop: 30, width: '100%' }}>
-              {['S&P 500', 'NASDAQ', 'DOW'].map((idx) => (
-                <View key={idx} style={styles.decoyAssetRow}>
-                  <Text style={styles.decoyAssetName}>{idx}</Text>
-                  <Text style={[styles.decoyAssetValue, { color: COLORS.success }]}>+0.8%</Text>
-                </View>
-              ))}
-            </View>
-          </Animated.View>
-        );
-      case 'wallet':
-        return (
-          <Animated.View style={{ opacity: tabAnim, alignItems: 'center', paddingTop: 40 }}>
-            <Ionicons name="wallet-outline" size={80} color={COLORS.border} />
-            <Text style={{ color: COLORS.subText, marginTop: 20, textAlign: 'center' }}>Connect your bank account or credit card to start trading.</Text>
-            <TouchableOpacity style={[styles.decoyActionButton, { marginTop: 30, backgroundColor: COLORS.card, width: '100%' }]}>
-              <Text style={styles.decoyActionButtonText}>Add Payment Method</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        );
-      case 'profile':
-        return (
-          <Animated.View style={{ opacity: tabAnim, paddingTop: 20 }}>
-            <View style={{ alignItems: 'center', marginVertical: 20 }}>
-              <View style={styles.decoyAvatarLarge}>
-                <Ionicons name="person" size={40} color="#FFF" />
-              </View>
-              <Text style={[styles.coverTitle, { fontSize: 22, marginTop: 15 }]}>{decoyUser?.name || 'User'}</Text>
-              <Text style={styles.coverSub}>{decoyUser?.email || 'user@example.com'}</Text>
-            </View>
-            <TouchableOpacity style={styles.decoyProfileItem} onPress={handleDecoyLogout}>
-              <Ionicons name="log-out-outline" size={20} color={COLORS.danger} />
-              <Text style={{ color: COLORS.danger, marginLeft: 10 }}>Sign Out</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        );
-      default:
-        return null;
-    }
-  };
-
   const sortedLinks = [...links].sort((a, b) => (b.isFav ? 1 : 0) - (a.isFav ? 1 : 0));
   const sortedMedia = [...media].sort((a, b) => (b.isFav ? 1 : 0) - (a.isFav ? 1 : 0));
 
-  const renderToast = () => {
-    if (!toastData.visible) return null;
-    const toastColor = toastData.type === 'success' ? COLORS.success : toastData.type === 'danger' ? COLORS.danger : COLORS.warning;
+  const ToastComponent = () => {
+    const icons = { success: 'checkmark-circle', danger: 'close-circle', warning: 'warning', info: 'information-circle' };
+    const colors = { success: COLORS.success, danger: COLORS.danger, warning: COLORS.warning, info: COLORS.accent };
     return (
-      <View style={styles.sideToast}>
+      <Animated.View style={[styles.sideToast, { transform: [{ translateX: toastAnim }] }]}>
         <View style={styles.toastContent}>
-          <Ionicons name="information-circle" size={18} color={toastColor} />
+          <Ionicons name={icons[toastData.type]} size={18} color={colors[toastData.type]} />
           <View style={{ marginLeft: 10, flex: 1 }}>
             <Text style={styles.toastTitle}>{toastData.title}</Text>
             <Text style={styles.toastMsg}>{toastData.msg}</Text>
           </View>
         </View>
-      </View>
+        <View style={styles.toastBarBg}>
+          <Animated.View style={[styles.toastBarFill, { backgroundColor: colors[toastData.type], width: progressAnim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }) }]} />
+        </View>
+      </Animated.View>
     );
   };
 
@@ -561,15 +485,19 @@ export default function CovertVaultFull() {
                   <TouchableOpacity onPress={() => setShowSignUp(false)} style={{ marginBottom: 20 }}><Ionicons name="arrow-back" size={24} color={COLORS.text} /></TouchableOpacity>
                   <Text style={styles.coverTitle}>Create Account</Text>
                   <View style={{ marginTop: 30 }}>
-                    <TextInput style={styles.input} placeholder="Full Name" placeholderTextColor={COLORS.border} value={signUpData.name} onChangeText={(t) => setSignUpData({ ...signUpData, name: t })} />
-                    <TextInput style={styles.input} placeholder="Email" placeholderTextColor={COLORS.border} autoCapitalize="none" value={signUpData.email} onChangeText={(t) => setSignUpData({ ...signUpData, email: t })} />
-                    <TextInput style={styles.input} placeholder="Password" placeholderTextColor={COLORS.border} secureTextEntry value={signUpData.password} onChangeText={(t) => setSignUpData({ ...signUpData, password: t })} />
-                    <TextInput style={styles.input} placeholder="Confirm" placeholderTextColor={COLORS.border} secureTextEntry value={signUpData.confirm} onChangeText={(t) => setSignUpData({ ...signUpData, confirm: t })} />
+                    <Text style={styles.inputLabel}>Full Name</Text>
+                    <TextInput style={styles.input} placeholder="John Doe" placeholderTextColor={COLORS.border} keyboardAppearance="dark" value={signUpData.name} onChangeText={(t) => setSignUpData({ ...signUpData, name: t })} />
+                    <Text style={styles.inputLabel}>Email</Text>
+                    <TextInput style={styles.input} placeholder="email@example.com" placeholderTextColor={COLORS.border} autoCapitalize="none" keyboardAppearance="dark" value={signUpData.email} onChangeText={(t) => setSignUpData({ ...signUpData, email: t })} />
+                    <Text style={styles.inputLabel}>Password</Text>
+                    <TextInput style={styles.input} placeholder="At least 6 characters" placeholderTextColor={COLORS.border} secureTextEntry keyboardAppearance="dark" value={signUpData.password} onChangeText={(t) => setSignUpData({ ...signUpData, password: t })} />
+                    <Text style={styles.inputLabel}>Confirm Password</Text>
+                    <TextInput style={styles.input} placeholder="Re-enter password" placeholderTextColor={COLORS.border} secureTextEntry keyboardAppearance="dark" value={signUpData.confirm} onChangeText={(t) => setSignUpData({ ...signUpData, confirm: t })} />
                     <TouchableOpacity style={[styles.coverBtn, { marginTop: 20 }]} onPress={handleDecoySignUp}>{fakeLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.coverBtnTxt}>Sign Up</Text>}</TouchableOpacity>
                   </View>
                 </ScrollView>
               </KeyboardAvoidingView>
-              {renderToast()}
+              <ToastComponent />
             </SafeAreaView>
           </View>
         </TouchableWithoutFeedback>
@@ -587,12 +515,13 @@ export default function CovertVaultFull() {
                   <TouchableOpacity onPress={() => setShowForgot(false)} style={{ marginBottom: 20 }}><Ionicons name="arrow-back" size={24} color={COLORS.text} /></TouchableOpacity>
                   <Text style={styles.coverTitle}>Reset Password</Text>
                   <View style={{ marginTop: 30 }}>
-                    <TextInput style={styles.input} placeholder="Email Address" placeholderTextColor={COLORS.border} autoCapitalize="none" value={authInput} onChangeText={setAuthInput} />
+                    <Text style={styles.inputLabel}>Email Address</Text>
+                    <TextInput style={styles.input} placeholder="email@example.com" placeholderTextColor={COLORS.border} autoCapitalize="none" keyboardAppearance="dark" value={authInput} onChangeText={setAuthInput} />
                     <TouchableOpacity style={[styles.coverBtn, { marginTop: 20 }]} onPress={handleDecoyForgot}>{fakeLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.coverBtnTxt}>Send Link</Text>}</TouchableOpacity>
                   </View>
                 </View>
               </KeyboardAvoidingView>
-              {renderToast()}
+              <ToastComponent />
             </SafeAreaView>
           </View>
         </TouchableWithoutFeedback>
@@ -608,14 +537,14 @@ export default function CovertVaultFull() {
               <View style={styles.coverLogoBox}><Ionicons name="stats-chart" size={40} color={COLORS.primary} /></View>
               <Text style={styles.coverTitle}>NexTrade</Text>
               <Animated.View style={{ width: '100%', paddingHorizontal: 30, marginTop: 40, transform: [{ translateX: shakeAnim }] }}>
-                <View style={styles.coverInputWrap}><TextInput style={styles.coverInput} placeholder="Email Address" placeholderTextColor={COLORS.subText} value={authInput} onChangeText={handleAuthChange} autoCapitalize="none" /></View>
-                <View style={[styles.coverInputWrap, { marginTop: 15 }]}><TextInput style={styles.coverInput} placeholder="Password" placeholderTextColor={COLORS.subText} secureTextEntry value={passInput} onChangeText={setPassInput} /></View>
+                <View style={styles.coverInputWrap}><Ionicons name="mail-outline" size={20} color={COLORS.subText} style={styles.coverInputIcon} /><TextInput style={styles.coverInput} placeholder="Email Address" placeholderTextColor={COLORS.subText} value={authInput} onChangeText={handleAuthChange} autoCapitalize="none" keyboardAppearance="dark" /></View>
+                <View style={[styles.coverInputWrap, { marginTop: 15 }]}><Ionicons name="lock-closed-outline" size={20} color={COLORS.subText} style={styles.coverInputIcon} /><TextInput style={styles.coverInput} placeholder="Password" placeholderTextColor={COLORS.subText} secureTextEntry value={passInput} onChangeText={setPassInput} keyboardAppearance="dark" /></View>
                 <TouchableOpacity style={{ alignSelf: 'flex-end', marginTop: 10 }} onPress={() => setShowForgot(true)}><Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: '600' }}>Forgot Password?</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.coverBtn} onPress={handleDecoyLogin}>{fakeLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.coverBtnTxt}>Sign In</Text>}</TouchableOpacity>
                 <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 25 }}><Text style={{ color: COLORS.subText }}>New? </Text><TouchableOpacity onPress={() => setShowSignUp(true)}><Text style={{ color: COLORS.primary, fontWeight: 'bold' }}>Create Account</Text></TouchableOpacity></View>
               </Animated.View>
             </KeyboardAvoidingView>
-            {renderToast()}
+            <ToastComponent />
             {showPrivacyBlur && <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />}
           </SafeAreaView>
         </View>
@@ -633,10 +562,76 @@ export default function CovertVaultFull() {
               <View style={styles.decoyAvatar}><Ionicons name="person" size={20} color="#FFF" /></View>
               <View style={{ marginLeft: 10 }}><Text style={{ color: COLORS.subText, fontSize: 12 }}>Welcome,</Text><Text style={{ color: '#FFF', fontSize: 16, fontWeight: 'bold' }}>{decoyUser?.name || 'Investor'}</Text></View>
             </View>
+            <Ionicons name="notifications-outline" size={24} color={COLORS.text} />
           </View>
           
           <ScrollView style={{ flex: 1, padding: 20 }} showsVerticalScrollIndicator={false}>
-            {renderDecoyContent()}
+            {decoyTab === 'home' && (
+              <Animated.View style={{ opacity: tabAnim, transform: [{ scale: tabAnim }] }}>
+                <View style={styles.decoyBalanceCard}>
+                  <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14 }}>Available Balance</Text>
+                  <Text style={{ color: '#FFF', fontSize: 40, fontWeight: '900', marginVertical: 10 }}>$12,450.80</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name="arrow-up" size={16} color={COLORS.success} />
+                    <Text style={{ color: COLORS.success, fontWeight: 'bold', marginLeft: 4 }}>$1,240.12 (11.2%) Today</Text>
+                  </View>
+                </View>
+                <View style={styles.decoySection}>
+                  <Text style={styles.decoySectionTitle}>Your Portfolio</Text>
+                  {['AAPL', 'TSLA', 'BTC'].map((asset, i) => (
+                    <View key={asset} style={styles.decoyAssetRow}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <View style={[styles.decoyAssetIcon, { backgroundColor: i === 0 ? '#333' : i === 1 ? '#222' : '#444' }]}>
+                          <Ionicons name={i === 0 ? 'logo-apple' : i === 1 ? 'car' : 'logo-bitcoin'} size={20} color="#FFF" />
+                        </View>
+                        <View>
+                          <Text style={styles.decoyAssetName}>{asset}</Text>
+                          <Text style={styles.decoyAssetShares}>{i + 2} shares</Text>
+                        </View>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={styles.decoyAssetValue}>${(1500 * (i + 1)).toLocaleString()}</Text>
+                        <Text style={{ color: i === 0 ? COLORS.success : COLORS.danger }}>{i === 0 ? '+5.2%' : '-2.1%'}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+                <TouchableOpacity style={styles.decoyActionButton} onPress={() => showToast('info', 'Demo', 'Simulated platform.')}>
+                  <Text style={styles.decoyActionButtonText}>Deposit Funds</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+            {decoyTab === 'market' && (
+              <Animated.View style={{ opacity: tabAnim, alignItems: 'center', paddingTop: 20 }}>
+                <Text style={[styles.decoySectionTitle, { marginBottom: 20 }]}>Market Overview</Text>
+                <Ionicons name="bar-chart" size={120} color={COLORS.border} />
+                <Text style={{ color: COLORS.subText, marginTop: 20 }}>Live market data would appear here.</Text>
+              </Animated.View>
+            )}
+            {decoyTab === 'wallet' && (
+              <Animated.View style={{ opacity: tabAnim, alignItems: 'center', paddingTop: 40 }}>
+                <Ionicons name="wallet-outline" size={80} color={COLORS.border} />
+                <Text style={{ color: COLORS.subText, marginTop: 20, textAlign: 'center' }}>Connect your bank account or credit card to start trading.</Text>
+                <TouchableOpacity style={[styles.decoyActionButton, { marginTop: 30, backgroundColor: COLORS.card, width: '100%' }]}>
+                  <Text style={styles.decoyActionButtonText}>Add Payment Method</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+            {decoyTab === 'profile' && (
+              <Animated.View style={{ opacity: tabAnim, paddingTop: 20 }}>
+                <View style={{ alignItems: 'center', marginVertical: 20 }}>
+                  <View style={styles.decoyAvatarLarge}>
+                    <Ionicons name="person" size={40} color="#FFF" />
+                  </View>
+                  <Text style={[styles.coverTitle, { fontSize: 22, marginTop: 15 }]}>{decoyUser?.name || 'User'}</Text>
+                  <Text style={styles.coverSub}>{decoyUser?.email || 'user@example.com'}</Text>
+                </View>
+                <TouchableOpacity style={styles.decoyProfileItem} onPress={handleDecoyLogout}>
+                  <Ionicons name="log-out-outline" size={20} color={COLORS.danger} />
+                  <Text style={{ color: COLORS.danger, marginLeft: 10 }}>Sign Out</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
           </ScrollView>
 
           <View style={styles.decoyBottomNav}>
@@ -652,7 +647,7 @@ export default function CovertVaultFull() {
               </TouchableOpacity>
             ))}
           </View>
-          {renderToast()}
+          <ToastComponent />
           {showPrivacyBlur && <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />}
         </SafeAreaView>
       </View>
@@ -667,6 +662,7 @@ export default function CovertVaultFull() {
             <TouchableOpacity onPress={() => setActiveUrl(null)} style={styles.webviewBack}><Ionicons name="close" size={24} color={COLORS.text} /><Text style={styles.webviewBackTxt}>Close</Text></TouchableOpacity>
           </View>
           <WebView source={{ uri: activeUrl }} style={{ flex: 1, backgroundColor: COLORS.bg }} />
+          <ToastComponent />
           {showPrivacyBlur && <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />}
         </SafeAreaView>
       </View>
@@ -678,6 +674,7 @@ export default function CovertVaultFull() {
       <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
         <SafeAreaView style={styles.safeArea}>
           <SecureMediaViewer media={activeMedia} onClose={() => setActiveMedia(null)} />
+          <ToastComponent />
           {showPrivacyBlur && <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />}
         </SafeAreaView>
       </View>
@@ -709,12 +706,17 @@ export default function CovertVaultFull() {
                 {sortedLinks.map(item => (
                   <View key={item.id} style={[styles.linkCard, item.isFav && { borderColor: COLORS.warning + '50', borderWidth: 1 }]}>
                     <View style={styles.linkInfo}>
+                      <View style={styles.linkIconBox}>{renderIcon(item)}</View>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.linkTitle} numberOfLines={1}>{item.title}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Text style={styles.linkTitle} numberOfLines={1}>{item.title}</Text>
+                          <TouchableOpacity onPress={() => toggleFavorite('link', item.id)} style={{ padding: 5 }}><Ionicons name={item.isFav ? "star" : "star-outline"} size={20} color={item.isFav ? COLORS.warning : COLORS.subText} /></TouchableOpacity>
+                        </View>
                         <Text style={[styles.linkUrl, item.privacy === 'blur' && { opacity: 0.3 }]} numberOfLines={1}>{item.privacy === 'hidden' ? '••••••••••••••••' : item.url}</Text>
                       </View>
                     </View>
                     <View style={styles.linkActions}>
+                      <TouchableOpacity style={styles.actionBtn} onPress={() => copyUrl(item.url)}><Ionicons name="copy-outline" size={18} color={COLORS.subText} /></TouchableOpacity>
                       <TouchableOpacity style={[styles.actionBtn, { backgroundColor: COLORS.danger + '15', borderColor: 'transparent' }]} onPress={() => setConfirmDel({ type: 'link', id: item.id })}><Ionicons name="trash-outline" size={18} color={COLORS.danger} /></TouchableOpacity>
                       <TouchableOpacity style={[styles.actionBtn, { flex: 1, backgroundColor: COLORS.vaultPrimary + '20', borderColor: COLORS.vaultPrimary }]} onPress={() => setActiveUrl(item.url)}><Ionicons name="open-outline" size={18} color={COLORS.vaultPrimary} /><Text style={[styles.actionTxt, { color: COLORS.vaultPrimary }]}>Connect</Text></TouchableOpacity>
                     </View>
@@ -728,7 +730,7 @@ export default function CovertVaultFull() {
                 <View style={styles.downloaderCard}>
                   <Text style={styles.downloaderTitle}>Secure Asset Importer</Text>
                   <View style={{ flexDirection: 'row', gap: 10, marginTop: 15 }}>
-                    <TextInput style={[styles.input, { flex: 1, marginBottom: 0, height: 50, backgroundColor: '#050505' }]} placeholder="Direct link (.mp4)" placeholderTextColor={COLORS.border} value={vidUrlInput} onChangeText={setVidUrlInput} />
+                    <TextInput style={[styles.input, { flex: 1, marginBottom: 0, height: 50, backgroundColor: '#050505' }]} placeholder="Direct link (.mp4)" placeholderTextColor={COLORS.border} keyboardAppearance="dark" value={vidUrlInput} onChangeText={setVidUrlInput} />
                     <TouchableOpacity style={styles.downloadBtn} onPress={downloadVideoUrl}><Ionicons name="cloud-download" size={24} color="#FFF" /></TouchableOpacity>
                   </View>
                   <TouchableOpacity style={{ alignSelf: 'center', marginTop: 15 }} onPress={pickMediaSecurely}><Text style={{ color: COLORS.subText, fontSize: 13, textDecorationLine: 'underline' }}>Import from Gallery (Images/Videos)</Text></TouchableOpacity>
@@ -770,10 +772,47 @@ export default function CovertVaultFull() {
             <View style={styles.modalOverlay}>
               <TouchableOpacity style={{ flex: 1 }} onPress={() => setShowAddModal(false)} />
               <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalCard}>
-                <Text style={styles.modalTitle}>Secure Link</Text>
-                <TextInput style={[styles.input, {marginTop: 20}]} placeholder="Title" placeholderTextColor={COLORS.border} value={newTitle} onChangeText={setNewTitle} />
-                <TextInput style={styles.input} placeholder="URL" placeholderTextColor={COLORS.border} autoCapitalize="none" value={newUrl} onChangeText={setNewUrl} />
-                <TouchableOpacity style={[styles.coverBtn, { marginTop: 10, backgroundColor: COLORS.vaultPrimary }]} onPress={addNewLink}><Text style={styles.coverBtnTxt}>Encrypt</Text></TouchableOpacity>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Secure Link</Text>
+                  <TouchableOpacity onPress={() => setShowAddModal(false)}><Ionicons name="close" size={24} color={COLORS.subText} /></TouchableOpacity>
+                </View>
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <Text style={styles.inputLabel}>Asset Title</Text>
+                  <TextInput style={styles.input} placeholder="Title" placeholderTextColor={COLORS.border} keyboardAppearance="dark" value={newTitle} onChangeText={setNewTitle} />
+                  <Text style={styles.inputLabel}>Target URL</Text>
+                  <TextInput style={styles.input} placeholder="URL" placeholderTextColor={COLORS.border} autoCapitalize="none" keyboardAppearance="dark" value={newUrl} onChangeText={setNewUrl} />
+                  
+                  <Text style={styles.inputLabel}>Privacy Level</Text>
+                  <View style={styles.optionsRow}>
+                    {['visible', 'blur', 'hidden'].map(p => (
+                      <TouchableOpacity key={p} style={[styles.optionBtn, privacyType === p && styles.optionActive]} onPress={() => setPrivacyType(p)}>
+                        <Text style={[styles.optionTxt, privacyType === p && { color: COLORS.text }]}>{p.charAt(0).toUpperCase() + p.slice(1)}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={styles.inputLabel}>Icon Rendering</Text>
+                  <View style={styles.optionsRow}>
+                    <TouchableOpacity style={[styles.optionBtn, iconType === 'auto' && styles.optionActive]} onPress={() => setIconType('auto')}>
+                      <Text style={[styles.optionTxt, iconType === 'auto' && { color: COLORS.text }]}>Auto</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.optionBtn, iconType === 'none' && styles.optionActive]} onPress={() => setIconType('none')}>
+                      <Text style={[styles.optionTxt, iconType === 'none' && { color: COLORS.text }]}>None</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.optionBtn, iconType === 'custom' && styles.optionActive]} onPress={pickImage}>
+                      <Text style={[styles.optionTxt, iconType === 'custom' && { color: COLORS.text }]}>Upload</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {iconType === 'custom' && customIconUri ? (
+                    <View style={{ alignItems: 'center', marginVertical: 10 }}>
+                      <Image source={{ uri: customIconUri }} style={{ width: 60, height: 60, borderRadius: 15 }} />
+                    </View>
+                  ) : null}
+
+                  <TouchableOpacity style={[styles.coverBtn, { marginTop: 10, backgroundColor: COLORS.vaultPrimary }]} onPress={addNewLink}><Text style={styles.coverBtnTxt}>Encrypt</Text></TouchableOpacity>
+                  <View style={{ height: 30 }} />
+                </ScrollView>
               </KeyboardAvoidingView>
             </View>
           </Modal>
@@ -791,7 +830,7 @@ export default function CovertVaultFull() {
             </View>
           </Modal>
 
-          {renderToast()}
+          <ToastComponent />
           {showPrivacyBlur && <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />}
         </SafeAreaView>
       </View>
@@ -839,6 +878,7 @@ const styles = StyleSheet.create({
   emptyTxt: { color: COLORS.subText, fontSize: 16, fontWeight: '700', marginTop: 15 },
   linkCard: { backgroundColor: COLORS.vaultCard, borderRadius: 24, padding: 20, marginBottom: 15, borderWidth: 1, borderColor: COLORS.vaultBorder },
   linkInfo: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  linkIconBox: { width: 50, height: 50, borderRadius: 16, backgroundColor: COLORS.vaultBg, justifyContent: 'center', alignItems: 'center', marginRight: 15, borderWidth: 1, borderColor: COLORS.vaultBorder },
   linkTitle: { color: COLORS.text, fontSize: 17, fontWeight: '900', marginBottom: 4 },
   linkUrl: { color: COLORS.subText, fontSize: 13, fontWeight: '600' },
   linkActions: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
@@ -869,10 +909,18 @@ const styles = StyleSheet.create({
   toastContent: { flexDirection: 'row', alignItems: 'center', padding: 10 },
   toastTitle: { color: COLORS.text, fontSize: 13, fontWeight: 'bold' },
   toastMsg: { color: COLORS.subText, fontSize: 11, marginTop: 1 },
+  toastBarBg: { width: '100%', height: 2, backgroundColor: 'rgba(255,255,255,0.05)' },
+  toastBarFill: { height: '100%' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
   modalCard: { backgroundColor: COLORS.vaultCard, borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 30, paddingBottom: 50 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
   modalTitle: { color: COLORS.text, fontSize: 22, fontWeight: '900' },
+  inputLabel: { color: COLORS.subText, fontSize: 12, fontWeight: '800', marginBottom: 8, marginLeft: 5, textTransform: 'uppercase' },
   input: { width: '100%', height: 55, backgroundColor: COLORS.vaultBg, borderRadius: 16, borderWidth: 1, borderColor: COLORS.vaultBorder, color: COLORS.text, fontSize: 15, paddingHorizontal: 20, marginBottom: 20 },
+  optionsRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  optionBtn: { flex: 1, height: 45, backgroundColor: COLORS.vaultBg, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.vaultBorder },
+  optionActive: { backgroundColor: COLORS.vaultPrimary + '20', borderColor: COLORS.vaultPrimary },
+  optionTxt: { color: COLORS.subText, fontSize: 13, fontWeight: '700' },
   webviewHeader: { flexDirection: 'row', alignItems: 'center', padding: 15, paddingTop: Platform.OS === 'android' ? 40 : 15, backgroundColor: COLORS.vaultCard, borderBottomWidth: 1, borderBottomColor: COLORS.vaultBorder },
   webviewBack: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.vaultBg, paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20 },
   webviewBackTxt: { color: COLORS.text, fontSize: 14, fontWeight: '800', marginLeft: 6 },
