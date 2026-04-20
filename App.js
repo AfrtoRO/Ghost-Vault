@@ -405,7 +405,7 @@ export default function CovertVaultFull() {
               <View style={styles.coverLogoBox}>
                 <Ionicons name="stats-chart" size={40} color={COLORS.primary} />
               </View>
-              <Text style={styles.coverTitle}>NexTrade Lite</Text>
+              <Text style={styles.coverTitle}>3FrT AUTH</Text>
               <Text style={styles.coverSub}>Start your investment journey</Text>
 
               <Animated.View style={{ width: '100%', paddingHorizontal: 30, marginTop: 40, transform: [{ translateX: shakeAnim }] }}>
