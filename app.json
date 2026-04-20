@@ -1,26 +1,26 @@
 {
   "expo": {
-    "name": "supportive-orange-stroopwafel",
-    "slug": "snack-f9ba8473-77cc-4ba3-af12-1632b525a79b",
+    "name": "NexTrade Lite",
+    "slug": "ghost-vault",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0A0E17"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ahmedsajed.nextrade"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#0A0E17"
       },
-      "edgeToEdgeEnabled": true
+      "package": "com.ahmedsajed.nextrade"
     },
     "web": {
       "favicon": "./assets/favicon.png"
