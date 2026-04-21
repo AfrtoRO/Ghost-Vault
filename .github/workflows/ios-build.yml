@@ -1,0 +1,39 @@
+name: iOS Build IPA
+on:
+  workflow_dispatch: # ده بيخليك تشغل البناء يدوياً بزرار
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          token: ${{ secrets.EXPO_TOKEN }} # هقولك تجيب ده منين
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build IPA (Prebuild)
+        run: |
+          npx expo prebuild --platform ios
+          
+      - name: Archive Build
+        run: |
+          # هنا بنعمل بناء للملف كـ Framework أو IPA خام
+          xcodebuild -workspace ios/*.xcworkspace -scheme ghost-vault -configuration Release -sdk iphoneos -derivedDataPath build
+          
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GhostVault-IPA
+          path: build/Build/Products/Release-iphoneos/*.app # أو بصيغة IPA لو متوفرة
