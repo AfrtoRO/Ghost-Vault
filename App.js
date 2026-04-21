@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView, StatusBar, Modal, KeyboardAvoidingView, Platform, Animated, AppState, Keyboard, Image, Dimensions, ActivityIndicator, FlatList, useWindowDimensions, TouchableWithoutFeedback } from 'react-native';
+import {
+  View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet,
+  SafeAreaView, StatusBar, Modal, KeyboardAvoidingView, Platform,
+  Animated, AppState, Keyboard, Image, Dimensions, ActivityIndicator, FlatList, useWindowDimensions, TouchableWithoutFeedback
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
@@ -7,7 +11,7 @@ import { WebView } from 'react-native-webview';
 import { BlurView } from 'expo-blur';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
-import { Video } from 'expo-av';
+import { Video, ResizeMode } from 'expo-av';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as MediaLibrary from 'expo-media-library';
 
@@ -22,7 +26,7 @@ const COLORS = {
 };
 
 const ENCRYPT_KEY = 11;
-const encryptData = (dataObj) => JSON.stringify(dataObj).split('').map(c => (c.charCodeAt(0) + ENCRYPT_KEY).toString(16)).join('-');
+const encryptData = (dataObj) => JSON.stringify(dataObj || []).split('').map(c => (c.charCodeAt(0) + ENCRYPT_KEY).toString(16)).join('-');
 const decryptData = (encryptedStr) => {
   try { return JSON.parse(encryptedStr.split('-').map(h => String.fromCharCode(parseInt(h, 16) - ENCRYPT_KEY)).join('')); }
   catch (e) { return []; }
@@ -85,7 +89,7 @@ const MediaItem = ({ item, isVisible, onClose }) => {
     return (
       <TouchableOpacity activeOpacity={1} onPress={() => setShowControls(!showControls)} style={{ width, height, backgroundColor: '#000', justifyContent: 'center' }}>
         <Image source={{ uri: item.uri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
-        {showControls && <TouchableOpacity style={[styles.vidControlBtn, { position: 'absolute', top: 50, right: 20 }]} onPress={onClose}><Ionicons name="close" size={28} color="#FFF" /></TouchableOpacity>}
+        {showControls ? <TouchableOpacity style={[styles.vidControlBtn, { position: 'absolute', top: 50, right: 20 }]} onPress={onClose}><Ionicons name="close" size={28} color="#FFF" /></TouchableOpacity> : null}
       </TouchableOpacity>
     );
   }
@@ -93,7 +97,7 @@ const MediaItem = ({ item, isVisible, onClose }) => {
   return (
     <TouchableOpacity activeOpacity={1} onPress={() => setShowControls(!showControls)} style={{ width, height, backgroundColor: '#000' }}>
       <Video ref={videoRef} source={{ uri: item.uri }} style={{ flex: 1, width: '100%', height: '100%' }} useNativeControls={false} resizeMode={width > height ? "cover" : "contain"} shouldPlay={isPlaying && isVisible} isMuted={isMuted} isLooping onPlaybackStatusUpdate={setStatus} />
-      {showControls && (
+      {showControls ? (
         <View style={[styles.customVideoControls, { paddingBottom: width > height ? 20 : 40 }]}>
           <View style={styles.progressContainer}>
             <Text style={styles.timeText}>{formatTime(status.positionMillis)}</Text>
@@ -108,12 +112,12 @@ const MediaItem = ({ item, isVisible, onClose }) => {
               <TouchableOpacity style={styles.skipBtn} onPress={() => handleSkip('forward')}><Ionicons name="play-forward" size={20} color="#FFF" /><Text style={styles.skipTxt}>10s</Text></TouchableOpacity>
             </View>
             <View style={{ flexDirection: 'row', gap: 10 }}>
-              <TouchableOpacity style={[styles.vidControlBtn, !isMuted && { backgroundColor: COLORS.success }]} onPress={() => isMuted ? generateCaptcha() : setIsMuted(true)}><Ionicons name={isMuted ? "volume-mute" : "volume-high"} size={24} color="#FFF" /></TouchableOpacity>
+              <TouchableOpacity style={[styles.vidControlBtn, !isMuted ? { backgroundColor: COLORS.success } : {}]} onPress={() => isMuted ? generateCaptcha() : setIsMuted(true)}><Ionicons name={isMuted ? "volume-mute" : "volume-high"} size={24} color="#FFF" /></TouchableOpacity>
               <TouchableOpacity style={styles.vidControlBtn} onPress={() => videoRef.current?.presentFullscreenPlayer()}><Ionicons name="expand" size={24} color="#FFF" /></TouchableOpacity>
             </View>
           </View>
         </View>
-      )}
+      ) : null}
       <Modal visible={showCaptcha} transparent animationType="fade">
         <View style={styles.modalOverlayCen}>
           <View style={styles.confirmCard}>
@@ -242,7 +246,6 @@ export default function CovertVaultFull() {
       Keyboard.dismiss(); authenticateBiometrics();
     }
   };
-
   const handleDecoyLogin = () => {
     Keyboard.dismiss();
     if (!authInput.trim() || !passInput.trim()) { triggerShake(); return; }
@@ -258,6 +261,12 @@ export default function CovertVaultFull() {
     setTimeout(() => { setFakeLoading(false); setDecoyUser({ email, name }); setIsDecoyApp(true); setDecoyTab('home'); setShowSignUp(false); setSignUpData({ name: '', email: '', password: '', confirm: '' }); }, 2000);
   };
 
+  const handleDecoyForgot = () => {
+    Keyboard.dismiss();
+    setFakeLoading(true);
+    setTimeout(() => { setFakeLoading(false); setShowForgot(false); showToast('success', 'Sent', 'Instructions sent to email.'); }, 1500);
+  };
+
   const downloadVideoUrl = async () => {
     if (!vidUrlInput.trim()) return;
     Keyboard.dismiss(); setIsDownloading(true); setDownloadProgress(0);
@@ -267,7 +276,7 @@ export default function CovertVaultFull() {
       const downloadResumable = FileSystem.createDownloadResumable(vidUrlInput, securePath, {}, (dp) => setDownloadProgress(Math.floor((dp.totalBytesWritten / dp.totalBytesExpectedToWrite) * 100)));
       const result = await downloadResumable.downloadAsync();
       if (result && result.uri) {
-        saveEncryptedMedia([{ id: Date.now().toString(), uri: result.uri, type: 'video', isFav: false, title: 'Intercepted Stream', timestamp: Date.now() }, ...media]);
+        saveEncryptedMedia([{ id: Date.now().toString(), uri: result.uri, type: 'video', isFav: false, title: 'Intercepted Stream', timestamp: Date.now() }, ...(media || [])]);
         showToast('success', 'Secured', 'Stream saved to vault.');
       }
     } catch (error) { showToast('danger', 'Failed', 'Stream unavailable.'); } finally { setIsDownloading(false); setVidUrlInput(''); }
@@ -286,7 +295,7 @@ export default function CovertVaultFull() {
           await FileSystem.copyAsync({ from: asset.uri, to: securePath });
           newItems.push({ id: Date.now().toString() + Math.random().toString(), uri: securePath, type: isVideo ? 'video' : 'image', isFav: false, title: `Asset`, timestamp: Date.now() });
         }
-        saveEncryptedMedia([...newItems, ...media]);
+        saveEncryptedMedia([...newItems, ...(media || [])]);
         showToast('success', 'Encrypted', `${newItems.length} asset(s) secured.`);
       }
     } catch (error) { showToast('danger', 'Error', 'Failed to import assets.'); }
@@ -299,10 +308,10 @@ export default function CovertVaultFull() {
     if (!newTitle || !newUrl) return;
     let finalUrl = newUrl.startsWith('http') ? newUrl : 'https://' + newUrl;
     if (editLinkId) {
-      saveEncryptedLinks(links.map(l => l.id === editLinkId ? { ...l, title: newTitle, url: finalUrl, privacy: privacyType, iconType: iconType, customIcon: customIconUri } : l));
+      saveEncryptedLinks((links || []).map(l => l.id === editLinkId ? { ...l, title: newTitle, url: finalUrl, privacy: privacyType, iconType: iconType, customIcon: customIconUri } : l));
       showToast('success', 'Updated', 'Link modified successfully.');
     } else {
-      saveEncryptedLinks([{ id: Date.now().toString(), title: newTitle, url: finalUrl, privacy: privacyType, iconType: iconType, customIcon: customIconUri, isFav: false, timestamp: Date.now() }, ...links]);
+      saveEncryptedLinks([{ id: Date.now().toString(), title: newTitle, url: finalUrl, privacy: privacyType, iconType: iconType, customIcon: customIconUri, isFav: false, timestamp: Date.now() }, ...(links || [])]);
       showToast('success', 'Saved', 'Link encrypted successfully.');
     }
     setShowAddModal(false);
@@ -310,13 +319,18 @@ export default function CovertVaultFull() {
 
   const executeDelete = async () => {
     if (!confirmDel) return;
-    if (confirmDel.type === 'link') saveEncryptedLinks(links.filter(l => l.id !== confirmDel.id));
+    if (confirmDel.type === 'link') saveEncryptedLinks((links || []).filter(l => l.id !== confirmDel.id));
     else {
-      const target = media.find(m => m.id === confirmDel.id);
+      const target = (media || []).find(m => m.id === confirmDel.id);
       if (target) { try { await FileSystem.deleteAsync(target.uri); } catch (e) {} }
-      saveEncryptedMedia(media.filter(m => m.id !== confirmDel.id));
+      saveEncryptedMedia((media || []).filter(m => m.id !== confirmDel.id));
     }
     setConfirmDel(null);
+  };
+
+  const copyUrl = async (url) => {
+    await Clipboard.setStringAsync(url);
+    showToast('info', 'Copied', 'URL saved to clipboard.');
   };
 
   const renderIcon = (item) => {
@@ -339,8 +353,8 @@ export default function CovertVaultFull() {
     );
   };
 
-  const sortedLinks = [...links].sort((a, b) => (b.isFav ? 1 : 0) - (a.isFav ? 1 : 0));
-  const sortedMedia = [...media].sort((a, b) => (b.isFav ? 1 : 0) - (a.isFav ? 1 : 0));
+  const sortedLinks = [...(links || [])].sort((a, b) => (b.isFav ? 1 : 0) - (a.isFav ? 1 : 0));
+  const sortedMedia = [...(media || [])].sort((a, b) => (b.isFav ? 1 : 0) - (a.isFav ? 1 : 0));
 
   if (!isLoggedIn && !isDecoyApp) {
     if (showSignUp) {
@@ -387,7 +401,7 @@ export default function CovertVaultFull() {
                   <View style={{ marginTop: 30 }}>
                     <Text style={styles.inputLabel}>Email Address</Text>
                     <TextInput style={styles.input} placeholder="email@example.com" placeholderTextColor={COLORS.border} autoCapitalize="none" keyboardAppearance="dark" value={authInput} onChangeText={setAuthInput} />
-                    <TouchableOpacity style={[styles.coverBtn, { marginTop: 20 }]} onPress={() => { setFakeLoading(true); setTimeout(() => { setFakeLoading(false); setShowForgot(false); showToast('success', 'Sent', 'Instructions sent to email.'); }, 1500); }}>{fakeLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.coverBtnTxt}>Send Link</Text>}</TouchableOpacity>
+                    <TouchableOpacity style={[styles.coverBtn, { marginTop: 20 }]} onPress={handleDecoyForgot}>{fakeLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.coverBtnTxt}>Send Link</Text>}</TouchableOpacity>
                   </View>
                 </ScrollView>
               </KeyboardAvoidingView>
@@ -403,16 +417,18 @@ export default function CovertVaultFull() {
           <SafeAreaView style={styles.safeArea}>
             <StatusBar barStyle="light-content" />
             <KeyboardAvoidingView style={styles.centerAll} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-              <View style={styles.coverLogoBox}><Ionicons name="stats-chart" size={40} color={COLORS.primary} /></View>
-              <Text style={styles.coverTitle}>NexTrade</Text>
-              <Text style={styles.coverSub}>Smart Investment Platform</Text>
-              <Animated.View style={{ width: '100%', paddingHorizontal: 30, marginTop: 40, transform: [{ translateX: shakeAnim }] }}>
-                <View style={styles.coverInputWrap}><Ionicons name="mail-outline" size={20} color={COLORS.subText} style={styles.coverInputIcon} /><TextInput style={styles.coverInput} placeholder="Email Address" placeholderTextColor={COLORS.subText} value={authInput} onChangeText={handleAuthChange} autoCapitalize="none" keyboardAppearance="dark" /></View>
-                <View style={[styles.coverInputWrap, { marginTop: 15 }]}><Ionicons name="lock-closed-outline" size={20} color={COLORS.subText} style={styles.coverInputIcon} /><TextInput style={styles.coverInput} placeholder="Password" placeholderTextColor={COLORS.subText} secureTextEntry value={passInput} onChangeText={setPassInput} keyboardAppearance="dark" /></View>
-                <TouchableOpacity style={{ alignSelf: 'flex-end', marginTop: 10 }} onPress={() => setShowForgot(true)}><Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: '600' }}>Forgot Password?</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.coverBtn} onPress={handleDecoyLogin}>{fakeLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.coverBtnTxt}>Sign In</Text>}</TouchableOpacity>
-                <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 25 }}><Text style={{ color: COLORS.subText }}>New to NexTrade? </Text><TouchableOpacity onPress={() => setShowSignUp(true)}><Text style={{ color: COLORS.primary, fontWeight: 'bold' }}>Create Account</Text></TouchableOpacity></View>
-              </Animated.View>
+              <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', width: '100%' }} keyboardShouldPersistTaps="handled">
+                <View style={styles.coverLogoBox}><Ionicons name="stats-chart" size={40} color={COLORS.primary} /></View>
+                <Text style={styles.coverTitle}>NexTrade</Text>
+                <Text style={styles.coverSub}>Smart Investment Platform</Text>
+                <Animated.View style={{ width: '100%', paddingHorizontal: 30, marginTop: 40, transform: [{ translateX: shakeAnim }] }}>
+                  <View style={styles.coverInputWrap}><Ionicons name="mail-outline" size={20} color={COLORS.subText} style={styles.coverInputIcon} /><TextInput style={styles.coverInput} placeholder="Email Address" placeholderTextColor={COLORS.subText} value={authInput} onChangeText={handleAuthChange} autoCapitalize="none" keyboardAppearance="dark" /></View>
+                  <View style={[styles.coverInputWrap, { marginTop: 15 }]}><Ionicons name="lock-closed-outline" size={20} color={COLORS.subText} style={styles.coverInputIcon} /><TextInput style={styles.coverInput} placeholder="Password" placeholderTextColor={COLORS.subText} secureTextEntry value={passInput} onChangeText={setPassInput} keyboardAppearance="dark" /></View>
+                  <TouchableOpacity style={{ alignSelf: 'flex-end', marginTop: 10 }} onPress={() => setShowForgot(true)}><Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: '600' }}>Forgot Password?</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.coverBtn} onPress={handleDecoyLogin}>{fakeLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.coverBtnTxt}>Sign In</Text>}</TouchableOpacity>
+                  <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 25 }}><Text style={{ color: COLORS.subText }}>New to NexTrade? </Text><TouchableOpacity onPress={() => setShowSignUp(true)}><Text style={{ color: COLORS.primary, fontWeight: 'bold' }}>Create Account</Text></TouchableOpacity></View>
+                </Animated.View>
+              </ScrollView>
             </KeyboardAvoidingView>
             {renderToast()}
             {showPrivacyBlur && <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />}
@@ -478,7 +494,7 @@ export default function CovertVaultFull() {
                   <Text style={[styles.coverTitle, { fontSize: 22, marginTop: 15 }]}>{decoyUser?.name || 'User'}</Text>
                   <Text style={styles.coverSub}>{decoyUser?.email || 'user@example.com'}</Text>
                 </View>
-                <TouchableOpacity style={styles.decoyProfileItem} onPress={() => { setIsDecoyApp(false); setDecoyUser(null); setAuthInput(''); setPassInput(''); }}><Ionicons name="log-out-outline" size={20} color={COLORS.danger} /><Text style={{ color: COLORS.danger, marginLeft: 10 }}>Sign Out</Text></TouchableOpacity>
+                <TouchableOpacity style={styles.decoyProfileItem} onPress={handleDecoyLogout}><Ionicons name="log-out-outline" size={20} color={COLORS.danger} /><Text style={{ color: COLORS.danger, marginLeft: 10 }}>Sign Out</Text></TouchableOpacity>
               </Animated.View>
             )}
           </ScrollView>
@@ -527,7 +543,7 @@ export default function CovertVaultFull() {
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="light-content" />
         <View style={styles.vaultHeader}>
-          <View><Text style={styles.vaultHeaderTitle}>Ghost Vault</Text><Text style={styles.vaultHeaderSub}>{vaultTab === 'links' ? links.length + ' Links' : media.length + ' Media Assets'}</Text></View>
+          <View><Text style={styles.vaultHeaderTitle}>Ghost Vault</Text><Text style={styles.vaultHeaderSub}>{vaultTab === 'links' ? (links || []).length + ' Links' : (media || []).length + ' Media Assets'}</Text></View>
           <TouchableOpacity style={[styles.iconBtn, { backgroundColor: COLORS.danger + '20', borderColor: 'transparent' }]} onPress={() => setIsLoggedIn(false)}><Ionicons name="power" size={20} color={COLORS.danger} /></TouchableOpacity>
         </View>
 
@@ -553,7 +569,7 @@ export default function CovertVaultFull() {
                     </View>
                   </View>
                   <View style={styles.linkActions}>
-                    <TouchableOpacity style={styles.actionBtn} onPress={() => { Clipboard.setStringAsync(item.url); showToast('info', 'Copied', 'URL saved to clipboard.'); }}><Ionicons name="copy-outline" size={18} color={COLORS.subText} /></TouchableOpacity>
+                    <TouchableOpacity style={styles.actionBtn} onPress={() => copyUrl(item.url)}><Ionicons name="copy-outline" size={18} color={COLORS.subText} /></TouchableOpacity>
                     <TouchableOpacity style={styles.actionBtn} onPress={() => openEditLinkModal(item)}><Ionicons name="pencil-outline" size={18} color={COLORS.subText} /></TouchableOpacity>
                     <TouchableOpacity style={[styles.actionBtn, { backgroundColor: COLORS.danger + '15', borderColor: 'transparent' }]} onPress={() => setConfirmDel({ type: 'link', id: item.id })}><Ionicons name="trash-outline" size={18} color={COLORS.danger} /></TouchableOpacity>
                     <TouchableOpacity style={[styles.actionBtn, { flex: 1, backgroundColor: COLORS.vaultPrimary + '20', borderColor: COLORS.vaultPrimary }]} onPress={() => setActiveUrl(item.url)}><Ionicons name="open-outline" size={18} color={COLORS.vaultPrimary} /><Text style={[styles.actionTxt, { color: COLORS.vaultPrimary }]}>Connect</Text></TouchableOpacity>
@@ -655,7 +671,7 @@ const styles = StyleSheet.create({
   coverLogoBox: { width: 80, height: 80, borderRadius: 24, backgroundColor: COLORS.primaryLight, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
   coverTitle: { fontSize: 32, fontWeight: '900', color: COLORS.text, letterSpacing: -1 },
   coverSub: { fontSize: 15, color: COLORS.subText, marginTop: 8 },
-  coverInputWrap: { flexDirection: 'row', alignItems: 'center', height: 60, backgroundColor: COLORS.input, borderRadius: 16, paddingHorizontal: 15, borderWidth: 1, borderColor: COLORS.border },
+  coverInputWrap: { flexDirection: 'row', alignItems: 'center', height: 60, backgroundColor: COLORS.input, borderRadius: 16, paddingHorizontal: 15, borderWidth: 1, borderColor: COLORS.border, width: '100%' },
   coverInputIcon: { marginRight: 10 },
   coverInput: { flex: 1, color: COLORS.text, fontSize: 16, fontWeight: '600' },
   coverBtn: { height: 60, width: '100%', backgroundColor: COLORS.primary, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginTop: 30 },
