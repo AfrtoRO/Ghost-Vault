@@ -1,6 +1,6 @@
 name: iOS Build IPA
 on:
-  workflow_dispatch: # ده بيخليك تشغل البناء يدوياً بزرار
+  workflow_dispatch:
 
 jobs:
   build:
@@ -18,22 +18,29 @@ jobs:
         uses: expo/expo-github-action@v8
         with:
           expo-version: latest
-          token: ${{ secrets.EXPO_TOKEN }} # هقولك تجيب ده منين
+          token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Install Dependencies
         run: npm install
 
-      - name: Build IPA (Prebuild)
-        run: |
-          npx expo prebuild --platform ios
+      - name: Expo Prebuild
+        run: npx expo prebuild --platform ios
           
-      - name: Archive Build
+      - name: Install CocoaPods
+        run: cd ios && pod install && cd ..
+
+      - name: Build Unsigned App
         run: |
-          # هنا بنعمل بناء للملف كـ Framework أو IPA خام
-          xcodebuild -workspace ios/*.xcworkspace -scheme ghost-vault -configuration Release -sdk iphoneos -derivedDataPath build
+          xcodebuild -workspace ios/*.xcworkspace -scheme ghost-vault -configuration Release -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -derivedDataPath build
+          
+      - name: Package into IPA
+        run: |
+          mkdir -p Payload
+          mv build/Build/Products/Release-iphoneos/*.app Payload/
+          zip -r GhostVault.ipa Payload
           
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GhostVault-IPA
-          path: build/Build/Products/Release-iphoneos/*.app # أو بصيغة IPA لو متوفرة
+          name: GhostVault-Unsigned-IPA
+          path: GhostVault.ipa
