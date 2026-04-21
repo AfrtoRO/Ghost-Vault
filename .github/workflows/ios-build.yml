@@ -24,20 +24,23 @@ jobs:
         run: npm install
 
       - name: Expo Prebuild
-        run: npx expo prebuild --platform ios
-          
-      - name: Install CocoaPods
-        run: cd ios && pod install && cd ..
+        run: npx expo prebuild --platform ios --clean
 
       - name: Build Unsigned App
         run: |
-          xcodebuild -workspace ios/*.xcworkspace -scheme ghost-vault -configuration Release -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -derivedDataPath build
+          cd ios
+          WORKSPACE=$(ls | grep .xcworkspace | head -1)
+          SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list | awk '/Schemes:/{getline; print $1}')
+          echo "Building scheme: $SCHEME in workspace: $WORKSPACE"
+          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -derivedDataPath ../build || exit 1
           
       - name: Package into IPA
         run: |
+          cd build/Build/Products/Release-iphoneos
           mkdir -p Payload
-          mv build/Build/Products/Release-iphoneos/*.app Payload/
+          mv *.app Payload/
           zip -r GhostVault.ipa Payload
+          mv GhostVault.ipa ../../../../
           
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
