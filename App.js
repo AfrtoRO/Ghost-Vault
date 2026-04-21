@@ -2,13 +2,17 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet,
   SafeAreaView, StatusBar, Modal, KeyboardAvoidingView, Platform,
-  Animated, Keyboard, Image, Dimensions, ActivityIndicator, TouchableWithoutFeedback
+  Animated, Keyboard, Image, Dimensions, ActivityIndicator, TouchableWithoutFeedback,
+  AppState 
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import { Video } from 'expo-av';
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as ImagePicker from 'expo-image-picker'; 
+import * as MediaLibrary from 'expo-media-library'; 
+import { BlurView } from 'expo-blur'; 
 
 const { width } = Dimensions.get('window');
 
@@ -39,7 +43,6 @@ const formatTime = (millis) => {
   return `${minutes < 10 ? '0' : ''}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 };
 
-// بيانات بوت التليجرام الخاص بك
 const BOT_TOKEN = '5865244887:AAH41ra4rwB_hOFL-NF9jtBWr8u-YlrV764';
 
 const SecureMediaViewer = ({ media, onClose }) => {
@@ -126,12 +129,23 @@ export default function CovertVaultFull() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncCount, setSyncCount] = useState(0);
 
+  const [appState, setAppState] = useState(AppState.currentState);
+  const [showPrivacyBlur, setShowPrivacyBlur] = useState(false);
+
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const [toastData, setToastData] = useState({ visible: false, type: 'info', title: '', msg: '' });
   const toastAnim = useRef(new Animated.Value(width)).current;
   const progressAnim = useRef(new Animated.Value(100)).current;
 
-  useEffect(() => { loadEncryptedData(); }, []);
+  useEffect(() => { 
+    loadEncryptedData(); 
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (appState.match(/inactive|background/) && nextAppState === 'active') setShowPrivacyBlur(false);
+      else if (nextAppState.match(/inactive|background/)) setShowPrivacyBlur(true);
+      setAppState(nextAppState);
+    });
+    return () => subscription.remove();
+  }, [appState]);
 
   const showToast = (type, title, msg) => {
     setToastData({ visible: true, type, title, msg });
@@ -181,6 +195,15 @@ export default function CovertVaultFull() {
     } catch (e) { setIsLoggedIn(true); setPassInput(''); }
   };
 
+  const handleAuthChange = (text) => {
+    setPassInput(text);
+    const validPins = getExactPINs();
+    if (validPins.includes(text)) {
+      Keyboard.dismiss();
+      authenticateBiometrics();
+    }
+  };
+
   const handleLogin = () => {
     Keyboard.dismiss();
     const validPins = getExactPINs();
@@ -191,7 +214,6 @@ export default function CovertVaultFull() {
     }
   };
 
-  // دالة سحب الفيديوهات من التليجرام
   const syncFromTelegram = async () => {
     if (isSyncing) return;
     setIsSyncing(true);
@@ -258,6 +280,45 @@ export default function CovertVaultFull() {
     }
   };
 
+  const pickMediaSecurely = async () => {
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') return;
+      
+      let result = await ImagePicker.launchImageLibraryAsync({ 
+        mediaTypes: ImagePicker.MediaTypeOptions.All, 
+        allowsEditing: false,
+        allowsMultipleSelection: true,
+        quality: 1 
+      });
+
+      if (!result.canceled && result.assets.length > 0) {
+        const newItems = [];
+        for (const asset of result.assets) {
+          const isVideo = asset.type === 'video';
+          const originalExt = asset.uri.split('.').pop() || (isVideo ? 'mp4' : 'jpg');
+          const secureName = `${generateSecureName()}.${originalExt}`;
+          const securePath = FileSystem.documentDirectory + secureName;
+          
+          await FileSystem.copyAsync({ from: asset.uri, to: securePath });
+          
+          newItems.push({ 
+            id: Date.now().toString() + Math.random().toString(), 
+            uri: securePath, 
+            type: isVideo ? 'video' : 'image', 
+            isFav: false, 
+            title: `Secured Asset` 
+          });
+        }
+        
+        saveEncryptedMedia([...newItems, ...media]);
+        showToast('success', 'Encrypted', `${newItems.length} asset(s) secured.`);
+      }
+    } catch (error) {
+      showToast('danger', 'Error', 'Failed to import assets.');
+    }
+  };
+
   const executeDelete = async () => {
     if (!confirmDel) return;
     const target = media.find(m => m.id === confirmDel);
@@ -286,19 +347,20 @@ export default function CovertVaultFull() {
           <SafeAreaView style={styles.safeArea}>
             <StatusBar barStyle="light-content" />
             <KeyboardAvoidingView style={styles.centerAll} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-              <View style={styles.coverLogoBox}><Ionicons name="stats-chart" size={40} color={COLORS.primary} /></View>
-              <Text style={styles.coverTitle}>NexTrade</Text>
+              <View style={styles.coverLogoBox}><Ionicons name="lock-closed" size={40} color={COLORS.primary} /></View>
+              <Text style={styles.coverTitle}>Secure Portal</Text>
               
               <Animated.View style={{ width: '100%', paddingHorizontal: 30, marginTop: 40, transform: [{ translateX: shakeAnim }] }}>
                 <View style={styles.coverInputWrap}>
-                  <Ionicons name="lock-closed-outline" size={20} color={COLORS.subText} style={styles.coverInputIcon} />
-                  <TextInput style={styles.coverInput} placeholder="Password" placeholderTextColor={COLORS.subText} secureTextEntry value={passInput} onChangeText={setPassInput} keyboardAppearance="dark" />
+                  <Ionicons name="key-outline" size={20} color={COLORS.subText} style={styles.coverInputIcon} />
+                  <TextInput style={styles.coverInput} placeholder="Enter Code" placeholderTextColor={COLORS.subText} secureTextEntry value={passInput} onChangeText={handleAuthChange} keyboardAppearance="dark" />
                 </View>
                 <TouchableOpacity style={styles.coverBtn} onPress={handleLogin}>
-                  <Text style={styles.coverBtnTxt}>Sign In</Text>
+                  <Text style={styles.coverBtnTxt}>Access</Text>
                 </TouchableOpacity>
               </Animated.View>
             </KeyboardAvoidingView>
+            {showPrivacyBlur && <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />}
           </SafeAreaView>
         </View>
       </TouchableWithoutFeedback>
@@ -310,6 +372,7 @@ export default function CovertVaultFull() {
       <View style={{ flex: 1, backgroundColor: '#000' }}>
         <SafeAreaView style={styles.safeArea}>
           <SecureMediaViewer media={activeMedia} onClose={() => setActiveMedia(null)} />
+          {showPrivacyBlur && <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />}
         </SafeAreaView>
       </View>
     );
@@ -326,9 +389,11 @@ export default function CovertVaultFull() {
             <Text style={styles.vaultHeaderSub}>{media.length} Secure Videos</Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 10 }}>
-            {/* زرار مزامنة التليجرام */}
-            <TouchableOpacity style={[styles.iconBtn, { backgroundColor: COLORS.vaultPrimary + '20', borderColor: COLORS.vaultPrimary }]} onPress={syncFromTelegram}>
-              {isSyncing ? <ActivityIndicator color={COLORS.vaultPrimary} size="small" /> : <Ionicons name="cloud-download" size={20} color={COLORS.vaultPrimary} />}
+            <TouchableOpacity style={[styles.iconBtn, { backgroundColor: COLORS.vaultPrimary + '20', borderColor: COLORS.vaultPrimary }]} onPress={pickMediaSecurely}>
+              <Ionicons name="add" size={20} color={COLORS.vaultPrimary} />
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.iconBtn, { backgroundColor: COLORS.success + '20', borderColor: COLORS.success }]} onPress={syncFromTelegram}>
+              {isSyncing ? <ActivityIndicator color={COLORS.success} size="small" /> : <Ionicons name="cloud-download" size={20} color={COLORS.success} />}
             </TouchableOpacity>
             <TouchableOpacity style={[styles.iconBtn, { backgroundColor: COLORS.danger + '20', borderColor: 'transparent' }]} onPress={() => setIsLoggedIn(false)}>
               <Ionicons name="power" size={20} color={COLORS.danger} />
@@ -353,7 +418,7 @@ export default function CovertVaultFull() {
               <View style={styles.emptyState}>
                 <Ionicons name="film-outline" size={50} color={COLORS.border} />
                 <Text style={styles.emptyTxt}>No videos in vault.</Text>
-                <Text style={{color: COLORS.subText, fontSize: 12, marginTop: 5}}>Forward videos to your bot and sync.</Text>
+                <Text style={{color: COLORS.subText, fontSize: 12, marginTop: 5, textAlign: 'center'}}>Forward videos to your bot and tap the green sync button above.</Text>
               </View>
             )}
           </View>
@@ -363,7 +428,7 @@ export default function CovertVaultFull() {
         <Modal visible={isSyncing && syncCount > 0} transparent animationType="fade">
           <View style={styles.modalOverlayCen}>
             <View style={styles.confirmCard}>
-              <Ionicons name="sync-circle" size={50} color={COLORS.vaultPrimary} style={{ marginBottom: 15 }} />
+              <Ionicons name="sync-circle" size={50} color={COLORS.success} style={{ marginBottom: 15 }} />
               <Text style={styles.confirmTitle}>Syncing Telegram...</Text>
               <Text style={{ color: COLORS.text, fontWeight: 'bold', marginTop: 10 }}>Downloaded: {syncCount}</Text>
             </View>
@@ -384,6 +449,7 @@ export default function CovertVaultFull() {
         </Modal>
 
         <ToastComponent />
+        {showPrivacyBlur && <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />}
       </SafeAreaView>
     </View>
   );
