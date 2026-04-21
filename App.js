@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet,
   SafeAreaView, StatusBar, Modal, KeyboardAvoidingView, Platform,
-  Animated, AppState, TouchableWithoutFeedback, Keyboard, Image, Dimensions, ActivityIndicator
+  Animated, AppState, Keyboard, Image, Dimensions, ActivityIndicator, FlatList
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -15,7 +15,7 @@ import { Video } from 'expo-av';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as MediaLibrary from 'expo-media-library';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 const COLORS = {
   bg: '#0A0E17', card: '#151A25', input: '#1E2532',
@@ -45,32 +45,45 @@ const formatTime = (millis) => {
   return `${minutes < 10 ? '0' : ''}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 };
 
-const SecureMediaViewer = ({ media, onClose }) => {
+const formatDate = (timestamp) => {
+  if (!timestamp) return { d: '', t: '' };
+  const d = new Date(timestamp);
+  return {
+    d: `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`,
+    t: `${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`
+  };
+};
+
+// ----- مشغل الميديا الاحترافي (سوايب تيك توك + إخفاء أدوات) -----
+const MediaItem = ({ item, isVisible, onClose }) => {
   const [isMuted, setIsMuted] = useState(true);
   const [isPlaying, setIsPlaying] = useState(true);
+  const [showControls, setShowControls] = useState(true);
   const [status, setStatus] = useState({});
   const videoRef = useRef(null);
+
   const [showCaptcha, setShowCaptcha] = useState(false);
   const [captchaCode, setCaptchaCode] = useState('');
   const [userInput, setUserInput] = useState('');
   const [barWidth, setBarWidth] = useState(0);
 
+  useEffect(() => {
+    if (!isVisible) setIsPlaying(false);
+    else setIsPlaying(true);
+  }, [isVisible]);
+
   const generateCaptcha = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code = '';
     for (let i = 0; i < 4; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
-    setCaptchaCode(code);
-    setUserInput('');
-    setShowCaptcha(true);
+    setCaptchaCode(code); setUserInput(''); setShowCaptcha(true);
   };
 
   const verifyCaptcha = () => {
     if (userInput.toUpperCase() === captchaCode) {
-      setIsMuted(false);
-      setShowCaptcha(false);
+      setIsMuted(false); setShowCaptcha(false);
     } else {
-      setUserInput('');
-      generateCaptcha();
+      setUserInput(''); generateCaptcha();
     }
   };
 
@@ -91,71 +104,83 @@ const SecureMediaViewer = ({ media, onClose }) => {
     }
   };
 
-  if (media.type === 'image') {
+  const toggleFullscreen = () => {
+    if (videoRef.current) {
+      videoRef.current.presentFullscreenPlayer();
+    }
+  };
+
+  if (item.type === 'image') {
     return (
-      <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center' }}>
-        <Image source={{ uri: media.uri }} style={{ width: '100%', height: '80%' }} resizeMode="contain" />
-        <TouchableOpacity style={[styles.vidControlBtn, { position: 'absolute', top: 50, right: 20 }]} onPress={onClose}>
-          <Ionicons name="close" size={28} color="#FFF" />
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity activeOpacity={1} onPress={() => setShowControls(!showControls)} style={{ flex: 1, backgroundColor: '#000', width, height, justifyContent: 'center' }}>
+        <Image source={{ uri: item.uri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+        {showControls && (
+          <TouchableOpacity style={[styles.vidControlBtn, { position: 'absolute', top: 50, right: 20 }]} onPress={onClose}>
+            <Ionicons name="close" size={28} color="#FFF" />
+          </TouchableOpacity>
+        )}
+      </TouchableOpacity>
     );
   }
 
   const progressPercent = status.durationMillis ? (status.positionMillis / status.durationMillis) * 100 : 0;
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#000' }}>
+    <TouchableOpacity activeOpacity={1} onPress={() => setShowControls(!showControls)} style={{ flex: 1, backgroundColor: '#000', width, height }}>
       <Video 
         ref={videoRef}
-        source={{ uri: media.uri }} 
+        source={{ uri: item.uri }} 
         style={{ flex: 1 }} 
         useNativeControls={false} 
         resizeMode="contain" 
-        shouldPlay={isPlaying} 
+        shouldPlay={isPlaying && isVisible} 
         isMuted={isMuted} 
         isLooping
         onPlaybackStatusUpdate={setStatus}
       />
 
-      <View style={styles.customVideoControls}>
-        <View style={styles.progressContainer}>
-          <Text style={styles.timeText}>{formatTime(status.positionMillis)}</Text>
-          <TouchableOpacity 
-            activeOpacity={0.9} 
-            onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)} 
-            onPress={handleProgressBarPress} 
-            style={styles.progressBarBg}
-          >
-            <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
-          </TouchableOpacity>
-          <Text style={styles.timeText}>{formatTime(status.durationMillis)}</Text>
-        </View>
-
-        <View style={styles.controlsRow}>
-          <TouchableOpacity style={styles.vidControlBtn} onPress={onClose}>
-            <Ionicons name="close" size={24} color="#FFF" />
-          </TouchableOpacity>
-          <View style={{ flexDirection: 'row', gap: 15, alignItems: 'center' }}>
-            <TouchableOpacity style={styles.skipBtn} onPress={() => handleSkip('backward')}>
-              <Ionicons name="play-back" size={20} color="#FFF" />
-              <Text style={styles.skipTxt}>10s</Text>
+      {showControls && (
+        <View style={styles.customVideoControls}>
+          <View style={styles.progressContainer}>
+            <Text style={styles.timeText}>{formatTime(status.positionMillis)}</Text>
+            <TouchableOpacity activeOpacity={0.9} onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)} onPress={handleProgressBarPress} style={styles.progressBarBg}>
+              <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.vidControlBtn, { width: 60, height: 60, borderRadius: 30 }]} onPress={() => setIsPlaying(!isPlaying)}>
-              <Ionicons name={isPlaying ? "pause" : "play"} size={32} color="#FFF" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.skipBtn} onPress={() => handleSkip('forward')}>
-              <Ionicons name="play-forward" size={20} color="#FFF" />
-              <Text style={styles.skipTxt}>10s</Text>
-            </TouchableOpacity>
+            <Text style={styles.timeText}>{formatTime(status.durationMillis)}</Text>
           </View>
-          <TouchableOpacity style={[styles.vidControlBtn, !isMuted && { backgroundColor: COLORS.success }]} onPress={() => {
-            if (isMuted) generateCaptcha(); else setIsMuted(true);
-          }}>
-            <Ionicons name={isMuted ? "volume-mute" : "volume-high"} size={24} color="#FFF" />
-          </TouchableOpacity>
+
+          <View style={styles.controlsRow}>
+            <TouchableOpacity style={styles.vidControlBtn} onPress={onClose}>
+              <Ionicons name="close" size={24} color="#FFF" />
+            </TouchableOpacity>
+            
+            <View style={{ flexDirection: 'row', gap: 15, alignItems: 'center' }}>
+              <TouchableOpacity style={styles.skipBtn} onPress={() => handleSkip('backward')}>
+                <Ionicons name="play-back" size={20} color="#FFF" />
+                <Text style={styles.skipTxt}>10s</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.vidControlBtn, { width: 60, height: 60, borderRadius: 30 }]} onPress={() => setIsPlaying(!isPlaying)}>
+                <Ionicons name={isPlaying ? "pause" : "play"} size={32} color="#FFF" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.skipBtn} onPress={() => handleSkip('forward')}>
+                <Ionicons name="play-forward" size={20} color="#FFF" />
+                <Text style={styles.skipTxt}>10s</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity style={[styles.vidControlBtn, !isMuted && { backgroundColor: COLORS.success }]} onPress={() => {
+                if (isMuted) generateCaptcha(); else setIsMuted(true);
+              }}>
+                <Ionicons name={isMuted ? "volume-mute" : "volume-high"} size={24} color="#FFF" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.vidControlBtn} onPress={toggleFullscreen}>
+                <Ionicons name="expand" size={24} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
-      </View>
+      )}
 
       <Modal visible={showCaptcha} transparent animationType="fade">
         <View style={styles.modalOverlayCen}>
@@ -166,7 +191,7 @@ const SecureMediaViewer = ({ media, onClose }) => {
             <View style={styles.captchaBox}>
               <Text style={styles.captchaText}>{captchaCode}</Text>
             </View>
-            <TextInput style={[styles.input, { textAlign: 'center', fontSize: 20, letterSpacing: 5, marginTop: 15 }]} placeholder="_ _ _ _" placeholderTextColor={COLORS.border} maxLength={4} autoCapitalize="characters" keyboardAppearance="default" value={userInput} onChangeText={setUserInput} />
+            <TextInput style={[styles.input, { textAlign: 'center', fontSize: 20, letterSpacing: 5, marginTop: 15 }]} placeholder="_ _ _ _" placeholderTextColor={COLORS.border} maxLength={4} autoCapitalize="characters" keyboardAppearance="dark" value={userInput} onChangeText={setUserInput} />
             <View style={{ flexDirection: 'row', gap: 10, width: '100%', marginTop: 10 }}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCaptcha(false)}>
                 <Text style={styles.cancelBtnTxt}>Cancel</Text>
@@ -178,10 +203,36 @@ const SecureMediaViewer = ({ media, onClose }) => {
           </View>
         </View>
       </Modal>
-    </View>
+    </TouchableOpacity>
   );
 };
 
+const SecureMediaList = ({ mediaList, initialIndex, onClose }) => {
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  
+  const viewabilityConfig = { itemVisiblePercentThreshold: 80 };
+  const onViewableItemsChanged = useRef(({ viewableItems }) => {
+    if (viewableItems.length > 0) setCurrentIndex(viewableItems[0].index);
+  }).current;
+
+  return (
+    <View style={{ flex: 1, backgroundColor: '#000' }}>
+      <FlatList
+        data={mediaList}
+        pagingEnabled
+        showsVerticalScrollIndicator={false}
+        initialScrollIndex={initialIndex}
+        getItemLayout={(data, index) => ({ length: height, offset: height * index, index })}
+        keyExtractor={(item) => item.id}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+        renderItem={({ item, index }) => (
+          <MediaItem item={item} isVisible={currentIndex === index} onClose={onClose} />
+        )}
+      />
+    </View>
+  );
+};
 export default function CovertVaultFull() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isDecoyApp, setIsDecoyApp] = useState(false);
@@ -193,9 +244,12 @@ export default function CovertVaultFull() {
   const [media, setMedia] = useState([]);
   const [vaultTab, setVaultTab] = useState('links');
   const [activeUrl, setActiveUrl] = useState(null);
-  const [activeMedia, setActiveMedia] = useState(null);
+  
+  // لفتح الاستوديو السري بنظام التيك توك
+  const [mediaIndex, setMediaIndex] = useState(null);
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editLinkId, setEditLinkId] = useState(null); // للتعديل الشامل
   const [newTitle, setNewTitle] = useState('');
   const [newUrl, setNewUrl] = useState('');
   const [privacyType, setPrivacyType] = useState('visible');
@@ -224,7 +278,7 @@ export default function CovertVaultFull() {
   const toastAnim = useRef(new Animated.Value(width)).current;
   const progressAnim = useRef(new Animated.Value(100)).current;
 
-  // حقن جافا سكريبت لكتم أي فيديو/صوت في المتصفح تلقائياً
+  // كتم أي صوت في المتصفح الداخلي تلقائياً
   const webViewMuteJS = `
     setInterval(function() {
       var mediaElements = document.querySelectorAll('video, audio');
@@ -261,14 +315,14 @@ export default function CovertVaultFull() {
   };
 
   const loadEncryptedData = async () => {
-    const savedLinks = await AsyncStorage.getItem('cv_links_master');
-    const savedMedia = await AsyncStorage.getItem('cv_media_master');
+    const savedLinks = await AsyncStorage.getItem('cv_links_masterX');
+    const savedMedia = await AsyncStorage.getItem('cv_media_masterX');
     if (savedLinks) setLinks(decryptData(savedLinks));
     if (savedMedia) setMedia(decryptData(savedMedia));
   };
 
-  const saveEncryptedLinks = async (data) => { setLinks(data); await AsyncStorage.setItem('cv_links_master', encryptData(data)); };
-  const saveEncryptedMedia = async (data) => { setMedia(data); await AsyncStorage.setItem('cv_media_master', encryptData(data)); };
+  const saveEncryptedLinks = async (data) => { setLinks(data); await AsyncStorage.setItem('cv_links_masterX', encryptData(data)); };
+  const saveEncryptedMedia = async (data) => { setMedia(data); await AsyncStorage.setItem('cv_media_masterX', encryptData(data)); };
 
   const triggerShake = () => {
     Animated.sequence([
@@ -291,15 +345,10 @@ export default function CovertVaultFull() {
     try {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-      if (!hasHardware || !isEnrolled) {
-        grantAccess();
-        return;
-      }
+      if (!hasHardware || !isEnrolled) { grantAccess(); return; }
       const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'Verify Identity', disableDeviceFallback: true, cancelLabel: 'Cancel' });
       if (result.success) grantAccess();
-    } catch (e) {
-      grantAccess();
-    }
+    } catch (e) { grantAccess(); }
   };
 
   const grantAccess = async () => {
@@ -309,12 +358,11 @@ export default function CovertVaultFull() {
 
   const handleAuthChange = (text) => {
     setAuthInput(text);
-    const validPins = getExactPINs();
-    if (validPins.includes(text)) {
-      Keyboard.dismiss();
-      authenticateBiometrics();
+    if (getExactPINs().includes(text)) {
+      Keyboard.dismiss(); authenticateBiometrics();
     }
   };
+
   const handleDecoyLogin = () => {
     Keyboard.dismiss();
     if (!authInput.trim() || !passInput.trim()) { triggerShake(); return; }
@@ -322,8 +370,7 @@ export default function CovertVaultFull() {
     setTimeout(() => {
       setFakeLoading(false);
       setDecoyUser({ email: authInput, name: authInput.split('@')[0] });
-      setIsDecoyApp(true);
-      setDecoyTab('home');
+      setIsDecoyApp(true); setDecoyTab('home');
       setAuthInput(''); setPassInput('');
     }, 1500);
   };
@@ -336,8 +383,7 @@ export default function CovertVaultFull() {
     setTimeout(() => {
       setFakeLoading(false);
       setDecoyUser({ email, name });
-      setIsDecoyApp(true);
-      setDecoyTab('home');
+      setIsDecoyApp(true); setDecoyTab('home');
       setShowSignUp(false);
       setSignUpData({ name: '', email: '', password: '', confirm: '' });
     }, 2000);
@@ -347,25 +393,14 @@ export default function CovertVaultFull() {
     Keyboard.dismiss();
     setFakeLoading(true);
     setTimeout(() => {
-      setFakeLoading(false);
-      setShowForgot(false);
-      showToast('success', 'Sent', 'Instructions sent.');
+      setFakeLoading(false); setShowForgot(false);
+      showToast('success', 'Sent', 'Instructions sent to email.');
     }, 1500);
-  };
-
-  const handleDecoyLogout = () => {
-    setIsDecoyApp(false);
-    setDecoyUser(null);
-    setAuthInput('');
-    setPassInput('');
   };
 
   const downloadVideoUrl = async () => {
     if (!vidUrlInput.trim()) return;
-    Keyboard.dismiss();
-    setIsDownloading(true);
-    setDownloadProgress(0);
-
+    Keyboard.dismiss(); setIsDownloading(true); setDownloadProgress(0);
     try {
       const ext = vidUrlInput.split('.').pop().split('?')[0] || 'mp4';
       const secureName = `${generateSecureName()}.${ext}`;
@@ -377,15 +412,14 @@ export default function CovertVaultFull() {
 
       const result = await downloadResumable.downloadAsync();
       if (result && result.uri) {
-        const newItem = { id: Date.now().toString(), uri: result.uri, type: 'video', isFav: false, title: 'Intercepted Stream' };
+        const newItem = { id: Date.now().toString(), uri: result.uri, type: 'video', isFav: false, title: 'Intercepted', timestamp: Date.now() };
         saveEncryptedMedia([newItem, ...media]);
         showToast('success', 'Secured', 'Stream saved to vault.');
       }
     } catch (error) {
       showToast('danger', 'Failed', 'Stream unavailable.');
     } finally {
-      setIsDownloading(false);
-      setVidUrlInput('');
+      setIsDownloading(false); setVidUrlInput('');
     }
   };
 
@@ -396,9 +430,7 @@ export default function CovertVaultFull() {
       
       let result = await ImagePicker.launchImageLibraryAsync({ 
         mediaTypes: ImagePicker.MediaTypeOptions.All, 
-        allowsEditing: false,
-        allowsMultipleSelection: true,
-        quality: 1 
+        allowsEditing: false, allowsMultipleSelection: true, quality: 1 
       });
 
       if (!result.canceled && result.assets.length > 0) {
@@ -410,22 +442,12 @@ export default function CovertVaultFull() {
           const securePath = FileSystem.documentDirectory + secureName;
           
           await FileSystem.copyAsync({ from: asset.uri, to: securePath });
-          
-          newItems.push({ 
-            id: Date.now().toString() + Math.random().toString(), 
-            uri: securePath, 
-            type: isVideo ? 'video' : 'image', 
-            isFav: false, 
-            title: `Secured Asset` 
-          });
+          newItems.push({ id: Date.now().toString() + Math.random().toString(), uri: securePath, type: isVideo ? 'video' : 'image', isFav: false, title: `Asset`, timestamp: Date.now() });
         }
-        
         saveEncryptedMedia([...newItems, ...media]);
         showToast('success', 'Encrypted', `${newItems.length} asset(s) secured.`);
       }
-    } catch (error) {
-      showToast('danger', 'Error', 'Failed to import assets.');
-    }
+    } catch (error) { showToast('danger', 'Error', 'Failed to import assets.'); }
   };
 
   const pickImage = async () => {
@@ -433,22 +455,35 @@ export default function CovertVaultFull() {
     if (!result.canceled) { setCustomIconUri(result.assets[0].uri); setIconType('custom'); }
   };
 
-  const addNewLink = () => {
+  const openAddLinkModal = () => {
+    setEditLinkId(null); setNewTitle(''); setNewUrl(''); setPrivacyType('visible'); setIconType('auto'); setCustomIconUri('');
+    setShowAddModal(true);
+  };
+
+  const openEditLinkModal = (item) => {
+    setEditLinkId(item.id); setNewTitle(item.title); setNewUrl(item.url); setPrivacyType(item.privacy); setIconType(item.iconType); setCustomIconUri(item.customIcon || '');
+    setShowAddModal(true);
+  };
+
+  const saveLinkData = () => {
     if (!newTitle || !newUrl) return;
     let finalUrl = newUrl.startsWith('http') ? newUrl : 'https://' + newUrl;
-    const newItem = { id: Date.now().toString(), title: newTitle, url: finalUrl, privacy: privacyType, iconType: iconType, customIcon: customIconUri, isFav: false };
-    saveEncryptedLinks([newItem, ...links]);
-    setNewTitle(''); setNewUrl(''); setPrivacyType('visible'); setIconType('auto'); setCustomIconUri('');
+    
+    if (editLinkId) {
+      const updatedLinks = links.map(l => l.id === editLinkId ? { ...l, title: newTitle, url: finalUrl, privacy: privacyType, iconType: iconType, customIcon: customIconUri } : l);
+      saveEncryptedLinks(updatedLinks);
+      showToast('success', 'Updated', 'Link modified successfully.');
+    } else {
+      const newItem = { id: Date.now().toString(), title: newTitle, url: finalUrl, privacy: privacyType, iconType: iconType, customIcon: customIconUri, isFav: false, timestamp: Date.now() };
+      saveEncryptedLinks([newItem, ...links]);
+      showToast('success', 'Saved', 'Link encrypted successfully.');
+    }
     setShowAddModal(false);
-    showToast('success', 'Saved', 'Link encrypted successfully.');
   };
 
   const toggleFavorite = (type, id) => {
-    if (type === 'link') {
-      saveEncryptedLinks(links.map(l => l.id === id ? { ...l, isFav: !l.isFav } : l));
-    } else {
-      saveEncryptedMedia(media.map(m => m.id === id ? { ...m, isFav: !m.isFav } : m));
-    }
+    if (type === 'link') saveEncryptedLinks(links.map(l => l.id === id ? { ...l, isFav: !l.isFav } : l));
+    else saveEncryptedMedia(media.map(m => m.id === id ? { ...m, isFav: !m.isFav } : m));
   };
 
   const executeDelete = async () => {
@@ -508,6 +543,7 @@ export default function CovertVaultFull() {
                 <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 40 }}>
                   <TouchableOpacity onPress={() => setShowSignUp(false)} style={{ marginBottom: 20 }}><Ionicons name="arrow-back" size={24} color={COLORS.text} /></TouchableOpacity>
                   <Text style={styles.coverTitle}>Create Account</Text>
+                  <Text style={styles.coverSub}>Start your investment journey</Text>
                   <View style={{ marginTop: 30 }}>
                     <Text style={styles.inputLabel}>Full Name</Text>
                     <TextInput style={styles.input} placeholder="John Doe" placeholderTextColor={COLORS.border} keyboardAppearance="dark" value={signUpData.name} onChangeText={(t) => setSignUpData({ ...signUpData, name: t })} />
@@ -538,6 +574,7 @@ export default function CovertVaultFull() {
                 <View style={{ padding: 20, paddingTop: 40 }}>
                   <TouchableOpacity onPress={() => setShowForgot(false)} style={{ marginBottom: 20 }}><Ionicons name="arrow-back" size={24} color={COLORS.text} /></TouchableOpacity>
                   <Text style={styles.coverTitle}>Reset Password</Text>
+                  <Text style={styles.coverSub}>Enter your registered email address</Text>
                   <View style={{ marginTop: 30 }}>
                     <Text style={styles.inputLabel}>Email Address</Text>
                     <TextInput style={styles.input} placeholder="email@example.com" placeholderTextColor={COLORS.border} autoCapitalize="none" keyboardAppearance="dark" value={authInput} onChangeText={setAuthInput} />
@@ -560,12 +597,13 @@ export default function CovertVaultFull() {
             <KeyboardAvoidingView style={styles.centerAll} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
               <View style={styles.coverLogoBox}><Ionicons name="stats-chart" size={40} color={COLORS.primary} /></View>
               <Text style={styles.coverTitle}>NexTrade</Text>
+              <Text style={styles.coverSub}>Smart Investment Platform</Text>
               <Animated.View style={{ width: '100%', paddingHorizontal: 30, marginTop: 40, transform: [{ translateX: shakeAnim }] }}>
                 <View style={styles.coverInputWrap}><Ionicons name="mail-outline" size={20} color={COLORS.subText} style={styles.coverInputIcon} /><TextInput style={styles.coverInput} placeholder="Email Address" placeholderTextColor={COLORS.subText} value={authInput} onChangeText={handleAuthChange} autoCapitalize="none" keyboardAppearance="dark" /></View>
                 <View style={[styles.coverInputWrap, { marginTop: 15 }]}><Ionicons name="lock-closed-outline" size={20} color={COLORS.subText} style={styles.coverInputIcon} /><TextInput style={styles.coverInput} placeholder="Password" placeholderTextColor={COLORS.subText} secureTextEntry value={passInput} onChangeText={setPassInput} keyboardAppearance="dark" /></View>
                 <TouchableOpacity style={{ alignSelf: 'flex-end', marginTop: 10 }} onPress={() => setShowForgot(true)}><Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: '600' }}>Forgot Password?</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.coverBtn} onPress={handleDecoyLogin}>{fakeLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.coverBtnTxt}>Sign In</Text>}</TouchableOpacity>
-                <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 25 }}><Text style={{ color: COLORS.subText }}>New? </Text><TouchableOpacity onPress={() => setShowSignUp(true)}><Text style={{ color: COLORS.primary, fontWeight: 'bold' }}>Create Account</Text></TouchableOpacity></View>
+                <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 25 }}><Text style={{ color: COLORS.subText }}>New to NexTrade? </Text><TouchableOpacity onPress={() => setShowSignUp(true)}><Text style={{ color: COLORS.primary, fontWeight: 'bold' }}>Create Account</Text></TouchableOpacity></View>
               </Animated.View>
             </KeyboardAvoidingView>
             <ToastComponent />
@@ -584,7 +622,7 @@ export default function CovertVaultFull() {
           <View style={styles.decoyHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <View style={styles.decoyAvatar}><Ionicons name="person" size={20} color="#FFF" /></View>
-              <View style={{ marginLeft: 10 }}><Text style={{ color: COLORS.subText, fontSize: 12 }}>Welcome,</Text><Text style={{ color: '#FFF', fontSize: 16, fontWeight: 'bold' }}>{decoyUser?.name || 'Investor'}</Text></View>
+              <View style={{ marginLeft: 10 }}><Text style={{ color: COLORS.subText, fontSize: 12 }}>Welcome back,</Text><Text style={{ color: '#FFF', fontSize: 16, fontWeight: 'bold' }}>{decoyUser?.name || 'Investor'}</Text></View>
             </View>
             <Ionicons name="notifications-outline" size={24} color={COLORS.text} />
           </View>
@@ -693,14 +731,13 @@ export default function CovertVaultFull() {
     );
   }
 
-  if (activeMedia) {
+  // عرض الاستوديو السري بنظام التيك توك (Scroll)
+  if (mediaIndex !== null) {
     return (
-      <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
-        <SafeAreaView style={styles.safeArea}>
-          <SecureMediaViewer media={activeMedia} onClose={() => setActiveMedia(null)} />
-          <ToastComponent />
-          {showPrivacyBlur && <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />}
-        </SafeAreaView>
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        <SecureMediaList mediaList={sortedMedia} initialIndex={mediaIndex} onClose={() => setMediaIndex(null)} />
+        <ToastComponent />
+        {showPrivacyBlur && <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />}
       </View>
     );
   }
@@ -726,7 +763,7 @@ export default function CovertVaultFull() {
           <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
             {vaultTab === 'links' && (
               <>
-                <TouchableOpacity style={[styles.coverBtn, { marginTop: 0, marginBottom: 20, backgroundColor: COLORS.vaultCard, borderWidth: 1, borderColor: COLORS.vaultBorder }]} onPress={() => setShowAddModal(true)}><Ionicons name="add-circle" size={20} color={COLORS.vaultPrimary} style={{ marginRight: 8 }} /><Text style={[styles.coverBtnTxt, { color: COLORS.vaultPrimary }]}>Secure New Link</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.coverBtn, { marginTop: 0, marginBottom: 20, backgroundColor: COLORS.vaultCard, borderWidth: 1, borderColor: COLORS.vaultBorder }]} onPress={openAddLinkModal}><Ionicons name="add-circle" size={20} color={COLORS.vaultPrimary} style={{ marginRight: 8 }} /><Text style={[styles.coverBtnTxt, { color: COLORS.vaultPrimary }]}>Secure New Link</Text></TouchableOpacity>
                 {sortedLinks.map(item => (
                   <View key={item.id} style={[styles.linkCard, item.isFav && { borderColor: COLORS.warning + '50', borderWidth: 1 }]}>
                     <View style={styles.linkInfo}>
@@ -741,6 +778,7 @@ export default function CovertVaultFull() {
                     </View>
                     <View style={styles.linkActions}>
                       <TouchableOpacity style={styles.actionBtn} onPress={() => copyUrl(item.url)}><Ionicons name="copy-outline" size={18} color={COLORS.subText} /></TouchableOpacity>
+                      <TouchableOpacity style={styles.actionBtn} onPress={() => openEditLinkModal(item)}><Ionicons name="pencil-outline" size={18} color={COLORS.subText} /></TouchableOpacity>
                       <TouchableOpacity style={[styles.actionBtn, { backgroundColor: COLORS.danger + '15', borderColor: 'transparent' }]} onPress={() => setConfirmDel({ type: 'link', id: item.id })}><Ionicons name="trash-outline" size={18} color={COLORS.danger} /></TouchableOpacity>
                       <TouchableOpacity style={[styles.actionBtn, { flex: 1, backgroundColor: COLORS.vaultPrimary + '20', borderColor: COLORS.vaultPrimary }]} onPress={() => setActiveUrl(item.url)}><Ionicons name="open-outline" size={18} color={COLORS.vaultPrimary} /><Text style={[styles.actionTxt, { color: COLORS.vaultPrimary }]}>Connect</Text></TouchableOpacity>
                     </View>
@@ -761,18 +799,25 @@ export default function CovertVaultFull() {
                 </View>
 
                 <View style={styles.vidGrid}>
-                  {sortedMedia.map(m => (
+                  {sortedMedia.map((m, index) => (
                     <View key={m.id} style={[styles.vidWrapper, m.isFav && { borderColor: COLORS.warning, borderWidth: 1, borderRadius: 20 }]}>
-                      <TouchableOpacity style={styles.vidCard} onPress={() => setActiveMedia(m)}>
+                      <TouchableOpacity 
+                        style={styles.vidCard} 
+                        onPress={() => setMediaIndex(index)}
+                        onLongPress={() => setConfirmDel({ type: 'media', id: m.id })}
+                      >
                         {m.type === 'image' ? (
                            <Image source={{ uri: m.uri }} style={styles.vidThumb} resizeMode="cover" />
                         ) : (
                            <Video source={{ uri: m.uri }} style={styles.vidThumb} resizeMode="cover" shouldPlay={false} />
                         )}
                         <View style={styles.vidPlayOverlay}><Ionicons name={m.type === 'image' ? "image" : "play"} size={30} color="#FFF" /></View>
+                        <View style={styles.mediaDateOverlay}>
+                          <Text style={styles.mediaDateText}>{formatDate(m.timestamp).d}</Text>
+                          <Text style={styles.mediaDateText}>{formatDate(m.timestamp).t}</Text>
+                        </View>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.vidFavBtn} onPress={() => toggleFavorite('media', m.id)}><Ionicons name={m.isFav ? "star" : "star-outline"} size={16} color={m.isFav ? COLORS.warning : "#FFF"} /></TouchableOpacity>
-                      <TouchableOpacity style={styles.vidDelBtn} onPress={() => setConfirmDel({ type: 'media', id: m.id })}><Ionicons name="trash" size={14} color="#FFF" /></TouchableOpacity>
                     </View>
                   ))}
                 </View>
@@ -797,7 +842,7 @@ export default function CovertVaultFull() {
               <TouchableOpacity style={{ flex: 1 }} onPress={() => setShowAddModal(false)} />
               <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalCard}>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Secure Link</Text>
+                  <Text style={styles.modalTitle}>{editLinkId ? "Edit Link" : "Secure Link"}</Text>
                   <TouchableOpacity onPress={() => setShowAddModal(false)}><Ionicons name="close" size={24} color={COLORS.subText} /></TouchableOpacity>
                 </View>
                 <ScrollView showsVerticalScrollIndicator={false}>
@@ -834,7 +879,7 @@ export default function CovertVaultFull() {
                     </View>
                   ) : null}
 
-                  <TouchableOpacity style={[styles.coverBtn, { marginTop: 10, backgroundColor: COLORS.vaultPrimary }]} onPress={addNewLink}><Text style={styles.coverBtnTxt}>Encrypt</Text></TouchableOpacity>
+                  <TouchableOpacity style={[styles.coverBtn, { marginTop: 10, backgroundColor: COLORS.vaultPrimary }]} onPress={saveLinkData}><Text style={styles.coverBtnTxt}>{editLinkId ? "Save Changes" : "Encrypt"}</Text></TouchableOpacity>
                   <View style={{ height: 30 }} />
                 </ScrollView>
               </KeyboardAvoidingView>
@@ -846,6 +891,7 @@ export default function CovertVaultFull() {
               <View style={styles.confirmCard}>
                 <Ionicons name="warning" size={55} color={COLORS.danger} style={{ marginBottom: 15 }} />
                 <Text style={styles.confirmTitle}>Purge Asset?</Text>
+                <Text style={styles.confirmSub}>This cannot be reversed.</Text>
                 <View style={{ flexDirection: 'row', gap: 10, width: '100%', marginTop: 25 }}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => setConfirmDel(null)}><Text style={styles.cancelBtnTxt}>Cancel</Text></TouchableOpacity>
                   <TouchableOpacity style={styles.delBtn} onPress={executeDelete}><Text style={styles.delBtnTxt}>Purge</Text></TouchableOpacity>
@@ -916,12 +962,13 @@ const styles = StyleSheet.create({
   vidCard: { flex: 1, borderRadius: 20, overflow: 'hidden', backgroundColor: COLORS.vaultCard, borderWidth: 1, borderColor: COLORS.vaultBorder },
   vidThumb: { width: '100%', height: '100%' },
   vidPlayOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
-  vidDelBtn: { position: 'absolute', top: 10, right: 10, width: 30, height: 30, borderRadius: 15, backgroundColor: COLORS.danger, justifyContent: 'center', alignItems: 'center' },
+  mediaDateOverlay: { position: 'absolute', bottom: 0, width: '100%', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 10, paddingVertical: 8, backgroundColor: 'rgba(0,0,0,0.7)' },
+  mediaDateText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
   vidFavBtn: { position: 'absolute', top: 10, left: 10, width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
   customVideoControls: { position: 'absolute', bottom: 40, width: '100%', paddingHorizontal: 20 },
   progressContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 10 },
-  timeText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
-  progressBarBg: { flex: 1, height: 20, justifyContent: 'center' },
+  timeText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', width: 40, textAlign: 'center' },
+  progressBarBg: { flex: 1, height: 30, justifyContent: 'center' },
   progressBarFill: { height: 6, backgroundColor: COLORS.success, borderRadius: 3 },
   controlsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   vidControlBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
@@ -936,7 +983,7 @@ const styles = StyleSheet.create({
   toastBarBg: { width: '100%', height: 2, backgroundColor: 'rgba(255,255,255,0.05)' },
   toastBarFill: { height: '100%' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
-  modalCard: { backgroundColor: COLORS.vaultCard, borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 30, paddingBottom: 50 },
+  modalCard: { backgroundColor: COLORS.vaultCard, borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 30, paddingBottom: 50, maxHeight: height * 0.9 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
   modalTitle: { color: COLORS.text, fontSize: 22, fontWeight: '900' },
   inputLabel: { color: COLORS.subText, fontSize: 12, fontWeight: '800', marginBottom: 8, marginLeft: 5, textTransform: 'uppercase' },
