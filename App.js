@@ -11,7 +11,6 @@ import * as FileSystem from 'expo-file-system';
 import { Video } from 'expo-av';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as ImagePicker from 'expo-image-picker'; 
-import * as MediaLibrary from 'expo-media-library'; 
 import { BlurView } from 'expo-blur'; 
 
 const { width } = Dimensions.get('window');
@@ -282,9 +281,6 @@ export default function CovertVaultFull() {
 
   const pickMediaSecurely = async () => {
     try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') return;
-      
       let result = await ImagePicker.launchImageLibraryAsync({ 
         mediaTypes: ImagePicker.MediaTypeOptions.All, 
         allowsEditing: false,
@@ -406,8 +402,14 @@ export default function CovertVaultFull() {
             {media.map(m => (
               <View key={m.id} style={styles.vidWrapper}>
                 <TouchableOpacity style={styles.vidCard} onPress={() => setActiveMedia(m)}>
-                  <Video source={{ uri: m.uri }} style={styles.vidThumb} resizeMode="cover" shouldPlay={false} />
-                  <View style={styles.vidPlayOverlay}><Ionicons name="play" size={30} color="#FFF" /></View>
+                  {m.type === 'image' ? (
+                     <Image source={{ uri: m.uri }} style={styles.vidThumb} resizeMode="cover" />
+                  ) : (
+                     <Video source={{ uri: m.uri }} style={styles.vidThumb} resizeMode="cover" shouldPlay={false} />
+                  )}
+                  <View style={styles.vidPlayOverlay}>
+                    <Ionicons name={m.type === 'image' ? "image" : "play"} size={30} color="#FFF" />
+                  </View>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.vidDelBtn} onPress={() => setConfirmDel(m.id)}>
                   <Ionicons name="trash" size={14} color="#FFF" />
