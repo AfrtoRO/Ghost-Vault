@@ -14,14 +14,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.uusafe.portal"
+      "bundleIdentifier": "com.ahmed.saged"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
+        "foregroundImage": "./assets/icon.jpeg",
         "backgroundColor": "#0A0E17"
       },
-      "package": "com.uusafe.portal"
+      "package": "com.ahmed.saged"
     },
     "extra": {
       "eas": {
