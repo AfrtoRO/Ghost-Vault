@@ -5,10 +5,10 @@
     "version": "1.0.0",
     "jsEngine": "jsc",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icon.jpeg",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash-icon.jpeg",
       "resizeMode": "contain",
       "backgroundColor": "#0A0E17"
     },
