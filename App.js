@@ -13,7 +13,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { Video } from 'expo-av';
 import * as LocalAuthentication from 'expo-local-authentication';
-import * as MediaLibrary from 'expo-media-library';
+//import * as MediaLibrary from 'expo-media-library';
 
 const { width } = Dimensions.get('window');
 
